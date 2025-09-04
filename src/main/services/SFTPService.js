@@ -82,6 +82,15 @@ class SFTPService {
         });
     }
 
+    uploadFile(localPath, remotePath) {
+        return new Promise((resolve, reject) => {
+            this.sftp.fastPut(localPath, remotePath, (err) => {
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    }
+
     disconnect() {
         if (this.sftp) {
             this.sftp.end();

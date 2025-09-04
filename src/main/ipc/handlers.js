@@ -91,6 +91,23 @@ function registerIpcHandlers() {
       return { success: true, path: filePath };
   });
 
+  handle('ssm:sftp:uploadFile', async (evt, connId, remoteDir) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openFile'] });
+    if (canceled || filePaths.length === 0) {
+        return { success: false, reason: 'canceled' };
+    }
+    const localPath = filePaths[0];
+    const fileName = path.basename(localPath);
+    const remotePath = path.join(remoteDir, fileName).replace(/\\/g, '/');
+    try {
+        await sftpAction(connId, sftp => sftp.uploadFile(localPath, remotePath));
+        return { success: true, fileName };
+    } catch (error) {
+        logger.error(`Falha no upload do arquivo '${localPath}' para '${remotePath}': ${error.message}`);
+        return { success: false, error: error.message };
+    }
+  });
+
   // SSH Exec Action for one-off commands
   const sshAction = async (connectionId, command) => {
     const conn = await connectionService.get(connectionId);

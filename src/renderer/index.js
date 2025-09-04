@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const initCharts = () => { if (cpuChart) cpuChart.destroy(); if (memChart) memChart.destroy(); if (diskChart) diskChart.destroy(); cpuChart = createChart(document.getElementById('cpuChart').getContext('2d'), 'doughnut', { labels: ['Used', 'Free'], datasets: [{ data: [0, 100], backgroundColor: ['#61afef', '#3a3f4b'], borderWidth: 0 }] }); memChart = createChart(document.getElementById('memChart').getContext('2d'), 'doughnut', { labels: ['Used', 'Free'], datasets: [{ data: [0, 100], backgroundColor: ['#98c379', '#3a3f4b'], borderWidth: 0 }] }); diskChart = createChart(document.getElementById('diskChart').getContext('2d'), 'doughnut', { labels: ['Used', 'Free'], datasets: [{ data: [0, 100], backgroundColor: ['#e06c75', '#3a3f4b'], borderWidth: 0 }] }); };
     editor = monaco.editor.create(editorContainer, { value: '// Selecione um arquivo para editar', language: 'plaintext', theme: 'vs-dark', automaticLayout: true, readOnly: true });
     editor.onDidChangeModelContent(() => { if (currentOpenFile) saveFileBtn.disabled = false; });
+    const terminalObserver = new ResizeObserver(() => { if (term && fitAddon && document.getElementById('terminal').classList.contains('active')) { try { fitAddon.fit(); window.ssm.terminalResize(term.cols, term.rows); } catch (e) { console.log('Error fitting terminal:', e.message); } } });
+    terminalObserver.observe(terminalContainer);
 
     // --- Process Manager ---
     const parsePsOutput = (output) => {
@@ -91,38 +93,11 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
     };
-
-    const renderProcesses = (filter = '') => {
-        if (!processListBody) return;
-        const lowerCaseFilter = filter.toLowerCase();
-        const filteredProcesses = processCache.filter(p => p.command.toLowerCase().includes(lowerCaseFilter) || p.pid.includes(lowerCaseFilter));
-        processListBody.innerHTML = filteredProcesses.map(p => `
-            <tr>
-                <td>${p.pid}</td>
-                <td>${p.user}</td>
-                <td>${p.cpu}</td>
-                <td>${p.mem}</td>
-                <td class="command-cell">${p.command}</td>
-                <td><button class="kill-btn" data-pid="${p.pid}" data-command="${p.command}">Encerrar</button></td>
-            </tr>
-        `).join('');
-    };
-
-    const fetchAndRenderProcesses = async () => {
-        if (!activeConnectionId) return;
-        processListBody.innerHTML = '<tr><td colspan="6">Carregando processos...</td></tr>';
-        try {
-            const output = await window.ssm.processList(activeConnectionId);
-            processCache = parsePsOutput(output);
-            renderProcesses(processFilterInput.value);
-        } catch (error) {
-            Swal.fire({ title: 'Erro', text: `Não foi possível carregar processos: ${error.message}`, icon: 'error', ...swalTheme });
-            processListBody.innerHTML = '<tr><td colspan="6">Falha ao carregar.</td></tr>';
-        }
-    };
+    const renderProcesses = (filter = '') => { if (!processListBody) return; const lowerCaseFilter = filter.toLowerCase(); const filteredProcesses = processCache.filter(p => p.command.toLowerCase().includes(lowerCaseFilter) || p.pid.includes(lowerCaseFilter)); processListBody.innerHTML = filteredProcesses.map(p => `<tr><td>${p.pid}</td><td>${p.user}</td><td>${p.cpu}</td><td>${p.mem}</td><td class="command-cell">${p.command}</td><td><button class="kill-btn" data-pid="${p.pid}" data-command="${p.command}">Encerrar</button></td></tr>`).join(''); };
+    const fetchAndRenderProcesses = async () => { if (!activeConnectionId) return; processListBody.innerHTML = '<tr><td colspan="6">Carregando processos...</td></tr>'; try { const output = await window.ssm.processList(activeConnectionId); processCache = parsePsOutput(output); renderProcesses(processFilterInput.value); } catch (error) { Swal.fire({ title: 'Erro', text: `Não foi possível carregar processos: ${error.message}`, icon: 'error', ...swalTheme }); processListBody.innerHTML = '<tr><td colspan="6">Falha ao carregar.</td></tr>'; } };
 
     // --- Terminal Management ---
-    const setupTerminal = () => { if (term) term.dispose(); if (cleanupTerminalListener) cleanupTerminalListener(); term = new Terminal({ cursorBlink: true, theme: { background: '#21252b', foreground: '#abb2bf' } }); fitAddon = new FitAddon(); term.loadAddon(fitAddon); term.open(terminalContainer); fitAddon.fit(); window.ssm.terminalStart(activeConnectionId); term.onData(data => window.ssm.terminalWrite(data)); cleanupTerminalListener = window.ssm.onTerminalData(data => term.write(data)); };
+    const setupTerminal = () => { if (term) term.dispose(); if (cleanupTerminalListener) cleanupTerminalListener(); term = new Terminal({ cursorBlink: true, theme: { background: '#21252b', foreground: '#abb2bf' } }); fitAddon = new FitAddon(); term.loadAddon(fitAddon); term.open(terminalContainer); fitAddon.fit(); window.ssm.terminalResize(term.cols, term.rows); window.ssm.terminalStart(activeConnectionId); term.onData(data => window.ssm.terminalWrite(data)); cleanupTerminalListener = window.ssm.onTerminalData(data => term.write(data)); };
     const destroyTerminal = () => { if (term) { term.dispose(); term = null; } if (cleanupTerminalListener) { cleanupTerminalListener(); cleanupTerminalListener = null; } window.ssm.terminalStop(); };
 
     // --- UI & View Management ---
@@ -133,32 +108,22 @@ document.addEventListener('DOMContentLoaded', () => {
             tabContents.forEach(c => c.classList.remove('active'));
             const activeTabContent = document.getElementById(tab.dataset.tab);
             activeTabContent.classList.add('active');
-
-            if (tab.dataset.tab === 'terminal' && activeConnectionId) {
-                setupTerminal();
-            } else {
-                destroyTerminal();
-            }
-            if (tab.dataset.tab === 'processes' && activeConnectionId) {
-                fetchAndRenderProcesses();
-            }
+            if (tab.dataset.tab === 'terminal' && activeConnectionId) { setupTerminal(); } else { destroyTerminal(); }
+            if (tab.dataset.tab === 'processes' && activeConnectionId) { fetchAndRenderProcesses(); }
         });
     });
-
     const updateUIForConnection = (connId) => {
         activeConnectionId = connId;
         renderConnections();
         if (cleanupMetricsListener) { cleanupMetricsListener(); cleanupMetricsListener = null; }
         destroyTerminal();
         window.ssm.stopMetrics();
-
         if (activeConnectionId) {
             window.ssm.startMetrics(activeConnectionId);
             cleanupMetricsListener = window.ssm.onMetricsUpdate(updateDashboard);
             dashboardWelcome.style.display = 'none';
             dashboardContent.style.display = 'grid';
             initCharts();
-
             const activeTab = document.querySelector('.tab-link.active');
             if (activeTab && activeTab.dataset.tab === 'terminal') { setupTerminal(); }
             if (activeTab && activeTab.dataset.tab === 'processes') { fetchAndRenderProcesses(); }
@@ -168,15 +133,12 @@ document.addEventListener('DOMContentLoaded', () => {
             processCache = [];
             renderProcesses();
         }
-
         currentPath = '/';
         resetPanes();
         fileList.innerHTML = connId ? '' : '<li>Selecione uma conexão para ver os arquivos.</li>';
         currentPathEl.textContent = '/';
         if (connId) fetchAndRenderFiles('/');
     };
-
-    // ... Other functions (unchanged)
     const updateDashboard = (metrics) => { if (!activeConnectionId) return; if (metrics.status === 'error') { uptimeText.textContent = `Erro ao carregar: ${metrics.message}`; return; } const { uptime, memory, disk, cpu } = metrics.data; uptimeText.textContent = uptime; cpuText.textContent = `${cpu}%`; memText.textContent = `${memory.used} / ${memory.total} MB`; diskText.textContent = `${disk.used} / ${disk.total} (${disk.percent})`; cpuChart.data.datasets[0].data = [cpu, 100 - cpu]; cpuChart.update('none'); memChart.data.datasets[0].data = [memory.used, memory.free]; memChart.update('none'); const diskPercent = parseInt(disk.percent.replace('%', '')); diskChart.data.datasets[0].data = [diskPercent, 100 - diskPercent]; diskChart.update('none'); };
     const resetPanes = () => { showView(editorView); editor.setValue('// Selecione um arquivo para editar'); editor.updateOptions({ readOnly: true }); monaco.editor.setModelLanguage(editor.getModel(), 'plaintext'); openFileNameEl.textContent = 'Nenhum arquivo aberto'; saveFileBtn.disabled = true; currentOpenFile = null; };
     const showView = (viewToShow) => { editorView.style.display = 'none'; mediaView.style.display = 'none'; viewToShow.style.display = viewToShow === editorView ? 'flex' : 'block'; };
@@ -190,10 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const showContextMenu = (e, items) => { contextMenu.innerHTML = ''; items.forEach(item => { const div = document.createElement('div'); div.className = 'context-menu-item'; div.textContent = item.label; div.onclick = () => { item.action(); contextMenu.style.display = 'none'; }; contextMenu.appendChild(div); }); contextMenu.style.left = `${e.clientX}px`; contextMenu.style.top = `${e.clientY}px`; contextMenu.style.display = 'block'; };
 
     // --- Event Listeners ---
+    processListBody.addEventListener('click', async (e) => { const killBtn = e.target.closest('.kill-btn'); if (killBtn && activeConnectionId) { const pid = killBtn.dataset.pid; const command = killBtn.dataset.command; const result = await Swal.fire({ title: 'Encerrar Processo?', text: `Tem certeza que deseja encerrar o processo ${pid} (${command})?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, encerrar!', cancelButtonText: 'Cancelar', ...swalTheme }); if (result.isConfirmed) { try { Swal.fire({ title: 'Encerrando...', allowOutsideClick: false, didOpen: () => Swal.showLoading(), ...swalTheme }); await window.ssm.processKill(activeConnectionId, pid); Swal.close(); await fetchAndRenderProcesses(); } catch (error) { Swal.fire({ title: 'Erro', text: `Não foi possível encerrar o processo: ${error.message}`, icon: 'error', ...swalTheme }); } } } });
+    refreshProcessesBtn.addEventListener('click', fetchAndRenderProcesses);
+    processFilterInput.addEventListener('input', () => renderProcesses(processFilterInput.value));
     fileList.addEventListener('click', (e) => { const li = e.target.closest('li.file-item'); if (!li) return; if (li.dataset.type === 'dir' || li.classList.contains('parent-dir')) fetchAndRenderFiles(li.dataset.path); else openFile(li.dataset.path); });
     saveFileBtn.addEventListener('click', async () => { if (!currentOpenFile || saveFileBtn.disabled) return; const content = editor.getValue(); Swal.fire({ title: 'Salvando...', text: `Salvando ${currentOpenFile}`, allowOutsideClick: false, didOpen: () => Swal.showLoading(), ...swalTheme }); try { await window.ssm.sftpWriteFile(activeConnectionId, currentOpenFile, content); saveFileBtn.disabled = true; Swal.fire({ title: 'Salvo!', text: `${currentOpenFile} foi salvo com sucesso.`, icon: 'success', ...swalTheme }); } catch (error) { Swal.fire({ title: 'Erro ao Salvar', text: error.message, icon: 'error', ...swalTheme }); } });
-    fileExplorer.addEventListener('contextmenu', (e) => { e.preventDefault(); const target = e.target.closest('.file-item'); const remotePath = target?.dataset.path; const itemName = target?.dataset.name; const itemType = target?.dataset.type; let menuItems = [{ label: 'Criar Nova Pasta', action: async () => { const { value: folderName } = await Swal.fire({ title: 'Nome da Nova Pasta', input: 'text', inputPlaceholder: 'nome_da_pasta', showCancelButton: true, ...swalTheme }); if (folderName && folderName.trim()) { await window.ssm.sftpCreateDir(activeConnectionId, `${currentPath.endsWith('/') ? currentPath : currentPath + '/'}${folderName.trim()}`); fetchAndRenderFiles(currentPath); } } }]; if (target) { if (itemType === 'file') { menuItems.unshift({ label: 'Baixar Arquivo', action: async () => { const result = await window.ssm.sftpDownloadFile(activeConnectionId, remotePath); if (result.success) Swal.fire({ title: 'Download Concluído', text: `Arquivo salvo em: ${result.path}`, icon: 'success', ...swalTheme }); } }); menuItems.unshift({ label: 'Excluir Arquivo', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir "${itemName}"?`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { await window.ssm.sftpDeleteFile(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } }); } }); } else if (itemType === 'dir') { menuItems.unshift({ label: 'Excluir Pasta', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir pasta "${itemName}"? A pasta deve estar vazia.`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { try { await window.ssm.sftpDeleteDir(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } catch (err) { Swal.fire({ title: 'Erro', text: 'Não foi possível excluir. A pasta pode não estar vazia.', icon: 'error', ...swalTheme }); } } }); } }); } } showContextMenu(e, menuItems); });
+    fileExplorer.addEventListener('contextmenu', (e) => { e.preventDefault(); const target = e.target.closest('.file-item'); const remotePath = target?.dataset.path; const itemName = target?.dataset.name; const itemType = target?.dataset.type; let menuItems = [{ label: 'Upload de Arquivo', action: async () => { const result = await window.ssm.sftpUploadFile(activeConnectionId, currentPath); if (result.success) { fetchAndRenderFiles(currentPath); Swal.fire({ title: 'Upload Concluído', text: `${result.fileName} enviado com sucesso para ${currentPath}`, icon: 'success', timer: 2000, showConfirmButton: false, ...swalTheme }); } else if (result.reason !== 'canceled') { Swal.fire({ title: 'Erro no Upload', text: result.error, icon: 'error', ...swalTheme }); } } }, { label: 'Criar Nova Pasta', action: async () => { const { value: folderName } = await Swal.fire({ title: 'Nome da Nova Pasta', input: 'text', inputPlaceholder: 'nome_da_pasta', showCancelButton: true, ...swalTheme }); if (folderName && folderName.trim()) { await window.ssm.sftpCreateDir(activeConnectionId, `${currentPath.endsWith('/') ? currentPath : currentPath + '/'}${folderName.trim()}`); fetchAndRenderFiles(currentPath); } } }]; if (target) { if (itemType === 'file') { menuItems.unshift({ label: 'Baixar Arquivo', action: async () => { const result = await window.ssm.sftpDownloadFile(activeConnectionId, remotePath); if (result.success) Swal.fire({ title: 'Download Concluído', text: `Arquivo salvo em: ${result.path}`, icon: 'success', ...swalTheme }); } }); menuItems.unshift({ label: 'Excluir Arquivo', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir "${itemName}"?`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { await window.ssm.sftpDeleteFile(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } }); } }); } else if (itemType === 'dir') { menuItems.unshift({ label: 'Excluir Pasta', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir pasta "${itemName}"? A pasta deve estar vazia.`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { try { await window.ssm.sftpDeleteDir(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } catch (err) { Swal.fire({ title: 'Erro', text: 'Não foi possível excluir. A pasta pode não estar vazia.', icon: 'error', ...swalTheme }); } } }); } }); } } showContextMenu(e, menuItems); });
     window.addEventListener('click', () => contextMenu.style.display = 'none');
+    window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (!saveFileBtn.disabled) saveFileBtn.click(); } });
     addNewConnectionBtn.addEventListener('click', () => { let validatedConnectionData = null; Swal.fire({ title: 'Nova Conexão', html: `<form id="swal-connection-form" class="swal-form"><div class="swal-form-group"><label for="swal-name">Nome</label><input id="swal-name" name="name" class="swal2-input" placeholder="Meu Servidor Web" required></div><div class="swal-form-group"><label for="swal-host">Host</label><input id="swal-host" name="host" class="swal2-input" placeholder="192.168.1.100" required></div><div class="swal-form-group"><label for="swal-user">Usuário</label><input id="swal-user" name="user" class="swal2-input" placeholder="root" required></div><div class="swal-form-group"><label for="swal-authMethod">Autenticação</label><select id="swal-authMethod" name="authMethod" class="swal2-select"><option value="password">Senha</option><option value="key">Chave Privada</option></select></div><div id="swal-password-group" class="swal-form-group"><label for="swal-password">Senha</label><input type="password" id="swal-password" name="password" class="swal2-input"></div><div id="swal-key-path-group" class="swal-form-group" style="display: none;"><label for="swal-keyPath">Caminho da Chave</label><input id="swal-keyPath" name="keyPath" class="swal2-input" placeholder="C:\\Users\\...\\.ssh\\id_rsa"></div></form>`, showCancelButton: true, cancelButtonText: 'Cancelar', confirmButtonText: 'Testar Conexão', showLoaderOnConfirm: true, customClass: { popup: 'swal-wide', }, ...swalTheme, didOpen: () => { const form = document.getElementById('swal-connection-form'); const authSelect = document.getElementById('swal-authMethod'); const passwordGroup = document.getElementById('swal-password-group'); const keyPathGroup = document.getElementById('swal-key-path-group'); const toggleAuthFields = () => { if (authSelect.value === 'key') { passwordGroup.style.display = 'none'; keyPathGroup.style.display = 'flex'; } else { passwordGroup.style.display = 'flex'; keyPathGroup.style.display = 'none'; } }; authSelect.addEventListener('change', toggleAuthFields); toggleAuthFields(); form.addEventListener('input', () => { Swal.getConfirmButton().textContent = 'Testar Conexão'; validatedConnectionData = null; Swal.hideValidationMessage(); }); }, preConfirm: async () => { const form = document.getElementById('swal-connection-form'); const formData = new FormData(form); const connData = Object.fromEntries(formData.entries()); if (!connData.name || !connData.host || !connData.user) { Swal.showValidationMessage('Nome, Host e Usuário são obrigatórios'); return false; } try { await window.ssm.testConnection(connData); validatedConnectionData = connData; return true; } catch (error) { Swal.showValidationMessage(`Falha na conexão: ${error.message}`); return false; } } }).then(async (result) => { if (result.isConfirmed) { if (!validatedConnectionData) return; try { const { password, ...dataToSave } = validatedConnectionData; const newConnection = await window.ssm.addConnection(dataToSave); if (dataToSave.authMethod === 'password' && password) await window.ssm.setPassword(newConnection.id, password); await loadConnections(); Swal.fire({ title: 'Salvo!', text: 'Conexão adicionada com sucesso.', icon: 'success', ...swalTheme }); } catch (error) { Swal.fire({ title: 'Erro ao Salvar', text: 'Não foi possível salvar a conexão.', icon: 'error', ...swalTheme }); } } }); });
 
     // --- Initial Load ---

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('ssm', {
   sftpDeleteDir: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:deleteDir', connectionId, remotePath),
   sftpCreateDir: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:createDir', connectionId, remotePath),
   sftpDownloadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:downloadFile', connectionId, remotePath),
+  sftpUploadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:uploadFile', connectionId, remotePath),
 
   // MetricsService methods
   startMetrics: (connectionId) => ipcRenderer.send('ssm:metrics:start', connectionId),
