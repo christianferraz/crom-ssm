@@ -132,3 +132,6 @@ Contribuições são o que tornam a comunidade de código aberto um lugar incrí
 ## 📄 Licença
 
 Distribuído sob a licença ISC.
+
+
+Se possivel, colabore <3>
