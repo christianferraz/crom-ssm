@@ -51,4 +51,10 @@ contextBridge.exposeInMainWorld('ssm', {
   // ProcessService methods
   processList: (connectionId) => ipcRenderer.invoke('ssm:process:list', connectionId),
   processKill: (connectionId, pid) => ipcRenderer.invoke('ssm:process:kill', connectionId, pid),
+
+  // SnippetService methods
+  snippetsList: () => ipcRenderer.invoke('ssm:snippets:list'),
+  snippetAdd: (snippet) => ipcRenderer.invoke('ssm:snippets:add', snippet),
+  snippetUpdate: (snippet) => ipcRenderer.invoke('ssm:snippets:update', snippet),
+  snippetRemove: (id) => ipcRenderer.invoke('ssm:snippets:remove', id),
 });

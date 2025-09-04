@@ -6,6 +6,7 @@ const SFTPService = require('../services/SFTPService');
 const MetricsService = require('../services/MetricsService');
 const TerminalService = require('../services/TerminalService');
 const SSHService = require('../services/SSHService');
+const snippetService = require('../services/SnippetService');
 const logger = require('../utils/logger');
 
 let activeMetricsService = null;
@@ -184,6 +185,12 @@ function registerIpcHandlers() {
     const service = activeTerminals.get(terminalId);
     if (service) service.resize(cols, rows);
   });
+
+  // Snippets Handlers
+  handle('ssm:snippets:list', () => snippetService.list());
+  handle('ssm:snippets:add', (evt, snippet) => snippetService.add(snippet));
+  handle('ssm:snippets:update', (evt, snippet) => snippetService.update(snippet));
+  handle('ssm:snippets:remove', (evt, id) => snippetService.remove(id));
 }
 
 module.exports = { registerIpcHandlers };
