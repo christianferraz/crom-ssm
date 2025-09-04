@@ -5,6 +5,7 @@ const connectionService = require('../services/ConnectionService');
 const SFTPService = require('../services/SFTPService');
 const MetricsService = require('../services/MetricsService');
 const TerminalService = require('../services/TerminalService');
+const SSHService = require('../services/SSHService');
 const logger = require('../utils/logger');
 
 let activeMetricsService = null;
@@ -28,7 +29,7 @@ const handle = (channel, listener) => {
         logger.info(`IPC[handle]: Recebido '${channel}' com args: ${JSON.stringify(args)}`);
         try {
             const result = await listener(event, ...args);
-            const resultLog = (channel.includes('readFile')) ? `{ success: true, contentLength: ${result?.length || 0} }` : JSON.stringify(result);
+            const resultLog = (channel.includes('readFile') || channel.includes('processList')) ? `{ success: true, dataLength: result?.length || 0 }` : JSON.stringify(result);
             logger.info(`IPC[handle]: Sucesso em '${channel}'. Resultado: ${resultLog}`);
             return result;
         } catch (error) {
@@ -90,40 +91,65 @@ function registerIpcHandlers() {
       return { success: true, path: filePath };
   });
 
-  // Metrics Handlers
-  ipcMain.on('ssm:metrics:start', async (event, connectionId) => {
-    if (activeMetricsService) activeMetricsService.stopPolling();
+  // SSH Exec Action for one-off commands
+  const sshAction = async (connectionId, command) => {
     const conn = await connectionService.get(connectionId);
-    if (conn) {
-        const authConfig = await getAuthConfig(conn);
-        activeMetricsService = new MetricsService(authConfig, event.sender);
-        activeMetricsService.connectAndStartPolling();
+    if (!conn) throw new Error('Conexão não encontrada');
+    const authConfig = await getAuthConfig(conn);
+    const ssh = new SSHService(authConfig);
+    try {
+        await ssh.connect();
+        const result = await ssh.exec(command);
+        return result.stdout;
+    } finally {
+        ssh.end();
     }
+  };
+
+  // Process Handlers
+  handle('ssm:process:list', (evt, connId) => sshAction(connId, "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu"));
+  handle('ssm:process:kill', (evt, connId, pid) => {
+    const safePid = parseInt(pid, 10);
+    if (isNaN(safePid)) {
+        throw new Error('PID inválido.');
+    }
+    return sshAction(connId, `kill -9 ${safePid}`);
   });
-  ipcMain.on('ssm:metrics:stop', () => {
-    if (activeMetricsService) activeMetricsService.stopPolling();
-    activeMetricsService = null;
+  
+  // Metrics Handlers
+  ipcMain.on('ssm:metrics:start', async (event, connectionId) => { 
+    if (activeMetricsService) activeMetricsService.stopPolling(); 
+    const conn = await connectionService.get(connectionId); 
+    if (conn) { 
+        const authConfig = await getAuthConfig(conn); 
+        activeMetricsService = new MetricsService(authConfig, event.sender); 
+        activeMetricsService.connectAndStartPolling(); 
+    } 
+  });
+  ipcMain.on('ssm:metrics:stop', () => { 
+    if (activeMetricsService) activeMetricsService.stopPolling(); 
+    activeMetricsService = null; 
   });
 
   // Terminal Handlers
-  ipcMain.on('ssm:terminal:start', async (event, connectionId) => {
-    if (activeTerminalService) activeTerminalService.stop();
-    const conn = await connectionService.get(connectionId);
-    if (conn) {
-        const authConfig = await getAuthConfig(conn);
-        activeTerminalService = new TerminalService(authConfig, event.sender);
-        activeTerminalService.start();
-    }
+  ipcMain.on('ssm:terminal:start', async (event, connectionId) => { 
+    if (activeTerminalService) activeTerminalService.stop(); 
+    const conn = await connectionService.get(connectionId); 
+    if (conn) { 
+        const authConfig = await getAuthConfig(conn); 
+        activeTerminalService = new TerminalService(authConfig, event.sender); 
+        activeTerminalService.start(); 
+    } 
   });
-  ipcMain.on('ssm:terminal:stop', () => {
-    if (activeTerminalService) activeTerminalService.stop();
-    activeTerminalService = null;
+  ipcMain.on('ssm:terminal:stop', () => { 
+    if (activeTerminalService) activeTerminalService.stop(); 
+    activeTerminalService = null; 
   });
-  ipcMain.on('ssm:terminal:write', (event, data) => {
-    if (activeTerminalService) activeTerminalService.write(data);
+  ipcMain.on('ssm:terminal:write', (event, data) => { 
+    if (activeTerminalService) activeTerminalService.write(data); 
   });
-  ipcMain.on('ssm:terminal:resize', (event, { cols, rows }) => {
-    if (activeTerminalService) activeTerminalService.resize(cols, rows);
+  ipcMain.on('ssm:terminal:resize', (event, { cols, rows }) => { 
+    if (activeTerminalService) activeTerminalService.resize(cols, rows); 
   });
 }
 

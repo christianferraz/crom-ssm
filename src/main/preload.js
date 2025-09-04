@@ -43,5 +43,9 @@ contextBridge.exposeInMainWorld('ssm', {
     const listener = (event, data) => callback(data);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
-  }
+  },
+
+  // ProcessService methods
+  processList: (connectionId) => ipcRenderer.invoke('ssm:process:list', connectionId),
+  processKill: (connectionId, pid) => ipcRenderer.invoke('ssm:process:kill', connectionId, pid),
 });
