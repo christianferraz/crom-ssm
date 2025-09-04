@@ -1,0 +1,37 @@
+{
+  "name": "ssm-electron-app",
+  "version": "1.0.0",
+  "description": "Simple Server Manager application built with Electron.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "npm run build:renderer && electron .",
+    "build:renderer": "webpack --config webpack.config.js",
+    "dist": "npm run build:renderer && electron-builder",
+    "rebuild": "electron-rebuild"
+  },
+  "keywords": [
+    "electron",
+    "ssh",
+    "sftp",
+    "server-manager"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "keytar": "^7.9.0",
+    "monaco-editor": "^0.47.0",
+    "ssh2": "^1.15.0",
+    "sweetalert2": "^11.10.8"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "css-loader": "^7.1.2",
+    "electron": "^28.2.0",
+    "electron-builder": "^24.9.1",
+    "html-webpack-plugin": "^5.6.4",
+    "monaco-editor-webpack-plugin": "^7.1.0",
+    "style-loader": "^4.0.0",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^5.1.4"
+  }
+}
