@@ -9,7 +9,7 @@ const SSHService = require('../services/SSHService');
 const logger = require('../utils/logger');
 
 let activeMetricsService = null;
-let activeTerminalService = null;
+const activeTerminals = new Map();
 
 async function getAuthConfig(connData, useRawPassword = false) {
     let authConfig = {
@@ -160,24 +160,29 @@ function registerIpcHandlers() {
   });
 
   // Terminal Handlers
-  ipcMain.on('ssm:terminal:start', async (event, connectionId) => { 
-    if (activeTerminalService) activeTerminalService.stop(); 
-    const conn = await connectionService.get(connectionId); 
-    if (conn) { 
-        const authConfig = await getAuthConfig(conn); 
-        activeTerminalService = new TerminalService(authConfig, event.sender); 
-        activeTerminalService.start(); 
-    } 
+  ipcMain.on('ssm:terminal:create', async (event, connectionId, terminalId) => {
+      const conn = await connectionService.get(connectionId);
+      if (conn) {
+          const authConfig = await getAuthConfig(conn);
+          const terminalService = new TerminalService(authConfig, event.sender, terminalId);
+          activeTerminals.set(terminalId, terminalService);
+          terminalService.start();
+      }
   });
-  ipcMain.on('ssm:terminal:stop', () => { 
-    if (activeTerminalService) activeTerminalService.stop(); 
-    activeTerminalService = null; 
+  ipcMain.on('ssm:terminal:stop', (event, terminalId) => {
+    const service = activeTerminals.get(terminalId);
+    if (service) {
+      service.stop();
+      activeTerminals.delete(terminalId);
+    }
   });
-  ipcMain.on('ssm:terminal:write', (event, data) => { 
-    if (activeTerminalService) activeTerminalService.write(data); 
+  ipcMain.on('ssm:terminal:write', (event, terminalId, data) => {
+    const service = activeTerminals.get(terminalId);
+    if (service) service.write(data);
   });
-  ipcMain.on('ssm:terminal:resize', (event, { cols, rows }) => { 
-    if (activeTerminalService) activeTerminalService.resize(cols, rows); 
+  ipcMain.on('ssm:terminal:resize', (event, terminalId, { cols, rows }) => {
+    const service = activeTerminals.get(terminalId);
+    if (service) service.resize(cols, rows);
   });
 }
 

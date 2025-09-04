@@ -37,10 +37,10 @@ contextBridge.exposeInMainWorld('ssm', {
   },
 
   // TerminalService methods
-  terminalStart: (connectionId) => ipcRenderer.send('ssm:terminal:start', connectionId),
-  terminalStop: () => ipcRenderer.send('ssm:terminal:stop'),
-  terminalWrite: (data) => ipcRenderer.send('ssm:terminal:write', data),
-  terminalResize: (cols, rows) => ipcRenderer.send('ssm:terminal:resize', { cols, rows }),
+  terminalCreate: (connectionId, terminalId) => ipcRenderer.send('ssm:terminal:create', connectionId, terminalId),
+  terminalStop: (terminalId) => ipcRenderer.send('ssm:terminal:stop', terminalId),
+  terminalWrite: (terminalId, data) => ipcRenderer.send('ssm:terminal:write', terminalId, data),
+  terminalResize: (terminalId, cols, rows) => ipcRenderer.send('ssm:terminal:resize', terminalId, { cols, rows }),
   onTerminalData: (callback) => {
     const channel = 'ssm:terminal:data';
     const listener = (event, data) => callback(data);
