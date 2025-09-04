@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bem-vindo ao Crom-SSM</title>
+    <style>
+        :root {
+            --bg-primary: #282c34;
+            --text-primary: #abb2bf;
+            --grad-green: #2c5364;
+            --grad-yellow: #f0cb35;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+        }
+        h1 {
+            font-size: 48px;
+            font-weight: 300;
+            background: -webkit-linear-gradient(45deg, var(--grad-green), var(--grad-yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        p {
+            font-size: 18px;
+            line-height: 1.6;
+            margin: 20px 0 40px;
+        }
+        .enter-button {
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: 500;
+            color: #fff;
+            background: linear-gradient(to right, var(--grad-green), var(--grad-yellow));
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .enter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Crom-SSM</h1>
+        <p>
+            Seu Gerenciador de Servidores Simples e Poderoso.
+            Conecte-se, gerencie arquivos, monitore recursos e execute comandos
+            em um ambiente seguro e integrado.
+        </p>
+        <button id="enter-app-btn" class="enter-button">Entrar no Gerenciador</button>
+    </div>
+</body>
+</html>

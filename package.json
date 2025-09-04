@@ -1,5 +1,5 @@
 {
-  "name": "ssm-electron-app",
+  "name": "crom-ssm",
   "version": "1.0.0",
   "description": "Simple Server Manager application built with Electron.",
   "main": "src/main/main.js",
@@ -18,20 +18,23 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chart.js": "^4.4.2",
     "keytar": "^7.9.0",
     "monaco-editor": "^0.47.0",
     "ssh2": "^1.15.0",
-    "sweetalert2": "^11.10.8"
+    "sweetalert2": "^11.10.8",
+    "winston": "^3.13.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
-    "css-loader": "^7.1.2",
+    "css-loader": "^7.1.1",
     "electron": "^28.2.0",
     "electron-builder": "^24.9.1",
-    "html-webpack-plugin": "^5.6.4",
+    "html-webpack-plugin": "^5.6.0",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "style-loader": "^4.0.0",
-    "webpack": "^5.101.3",
+    "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4"
   }
 }

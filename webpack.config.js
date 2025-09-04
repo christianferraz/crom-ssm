@@ -2,36 +2,37 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
-module.exports = {
+const commonConfig = {
   mode: 'development',
-  entry: './src/renderer/index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'bundle.js',
-    // Adicionado para corrigir o erro 'global is not defined'
+    filename: '[name].bundle.js',
     globalObject: 'this',
   },
   target: 'electron-renderer',
   module: {
     rules: [
-      {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
-      },
-      {
-        test: /\.ttf$/,
-        type: 'asset/resource'
-      }
+      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
+      { test: /\.ttf$/, type: 'asset/resource' }
     ],
+  },
+  devtool: 'source-map'
+};
+
+const mainAppConfig = {
+  ...commonConfig,
+  entry: {
+    main: './src/renderer/index.js',
   },
   plugins: [
     new HtmlWebpackPlugin({
       template: './src/renderer/index.html',
-      // Adicionado para injetar a Política de Segurança de Conteúdo (CSP)
+      filename: 'index.html',
+      chunks: ['main'],
       meta: {
         'Content-Security-Policy': { 
           'http-equiv': 'Content-Security-Policy', 
-          'content': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:;"
+          'content': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; img-src 'self' data:;"
         },
       },
     }),
@@ -39,5 +40,20 @@ module.exports = {
       languages: ['javascript', 'typescript', 'html', 'css', 'json', 'markdown', 'shell', 'python', 'php', 'sql', 'yaml'],
     }),
   ],
-  devtool: 'source-map'
 };
+
+const welcomeConfig = {
+    ...commonConfig,
+    entry: {
+        welcome: './src/renderer/welcome.js'
+    },
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: './src/renderer/welcome.html',
+            filename: 'welcome.html',
+            chunks: ['welcome']
+        })
+    ]
+};
+
+module.exports = [mainAppConfig, welcomeConfig];
