@@ -4,9 +4,11 @@ const path = require('path');
 const connectionService = require('../services/ConnectionService');
 const SFTPService = require('../services/SFTPService');
 const MetricsService = require('../services/MetricsService');
+const TerminalService = require('../services/TerminalService');
 const logger = require('../utils/logger');
 
 let activeMetricsService = null;
+let activeTerminalService = null;
 
 async function getAuthConfig(connData, useRawPassword = false) {
     let authConfig = {
@@ -37,11 +39,12 @@ const handle = (channel, listener) => {
 };
 
 function registerIpcHandlers() {
+  // Connection Handlers
   handle('ssm:connections:list', () => connectionService.list());
   handle('ssm:connections:add', (evt, d) => connectionService.add(d));
   handle('ssm:connections:remove', (evt, id) => connectionService.remove(id));
   handle('ssm:connections:setPassword', (evt, id, p) => connectionService.setPassword(id, p));
-
+  
   handle('ssm:ssh:test', async (event, connData) => {
     const authConfig = await getAuthConfig(connData, true);
     const sftp = new SFTPService(authConfig);
@@ -53,6 +56,7 @@ function registerIpcHandlers() {
     }
   });
 
+  // SFTP Handlers
   const sftpAction = async (connectionId, action) => {
     const conn = await connectionService.get(connectionId);
     if (!conn) throw new Error('Conexão não encontrada');
@@ -65,7 +69,7 @@ function registerIpcHandlers() {
         sftp.disconnect(); 
     }
   };
-
+  
   handle('ssm:sftp:list', (evt, id, p) => sftpAction(id, sftp => sftp.list(p)));
   handle('ssm:sftp:readFile', (evt, id, p) => sftpAction(id, sftp => sftp.readFile(p)));
   handle('ssm:sftp:readFileAsBase64', (evt, id, p) => sftpAction(id, sftp => sftp.readFile(p, 'base64')));
@@ -73,7 +77,7 @@ function registerIpcHandlers() {
   handle('ssm:sftp:deleteFile', (evt, id, p) => sftpAction(id, sftp => sftp.deleteFile(p)));
   handle('ssm:sftp:deleteDir', (evt, id, p) => sftpAction(id, sftp => sftp.deleteDir(p)));
   handle('ssm:sftp:createDir', (evt, id, p) => sftpAction(id, sftp => sftp.createDir(p)));
-
+  
   handle('ssm:sftp:downloadFile', async (evt, connId, remotePath) => {
       const defaultFileName = path.basename(remotePath);
       const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: defaultFileName });
@@ -86,28 +90,40 @@ function registerIpcHandlers() {
       return { success: true, path: filePath };
   });
 
+  // Metrics Handlers
   ipcMain.on('ssm:metrics:start', async (event, connectionId) => {
-    logger.info(`IPC[on]: Recebido 'ssm:metrics:start' para a conexão ${connectionId}`);
-    if (activeMetricsService) {
-        activeMetricsService.stopPolling();
-    }
+    if (activeMetricsService) activeMetricsService.stopPolling();
     const conn = await connectionService.get(connectionId);
     if (conn) {
         const authConfig = await getAuthConfig(conn);
-        const webContents = event.sender;
-        activeMetricsService = new MetricsService(authConfig, webContents);
+        activeMetricsService = new MetricsService(authConfig, event.sender);
         activeMetricsService.connectAndStartPolling();
-    } else {
-        logger.error(`Não foi possível iniciar as métricas: conexão ${connectionId} não encontrada.`);
     }
   });
+  ipcMain.on('ssm:metrics:stop', () => {
+    if (activeMetricsService) activeMetricsService.stopPolling();
+    activeMetricsService = null;
+  });
 
-  ipcMain.on('ssm:metrics:stop', (event, connectionId) => {
-    logger.info(`IPC[on]: Recebido 'ssm:metrics:stop' para a conexão ${connectionId}`);
-    if (activeMetricsService) {
-        activeMetricsService.stopPolling();
-        activeMetricsService = null;
+  // Terminal Handlers
+  ipcMain.on('ssm:terminal:start', async (event, connectionId) => {
+    if (activeTerminalService) activeTerminalService.stop();
+    const conn = await connectionService.get(connectionId);
+    if (conn) {
+        const authConfig = await getAuthConfig(conn);
+        activeTerminalService = new TerminalService(authConfig, event.sender);
+        activeTerminalService.start();
     }
+  });
+  ipcMain.on('ssm:terminal:stop', () => {
+    if (activeTerminalService) activeTerminalService.stop();
+    activeTerminalService = null;
+  });
+  ipcMain.on('ssm:terminal:write', (event, data) => {
+    if (activeTerminalService) activeTerminalService.write(data);
+  });
+  ipcMain.on('ssm:terminal:resize', (event, { cols, rows }) => {
+    if (activeTerminalService) activeTerminalService.resize(cols, rows);
   });
 }
 

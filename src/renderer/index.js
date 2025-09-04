@@ -1,6 +1,9 @@
 import Swal from 'sweetalert2';
 import * as monaco from 'monaco-editor';
 import { Chart, registerables } from 'chart.js';
+import { Terminal } from 'xterm';
+import { FitAddon } from 'xterm-addon-fit';
+import 'xterm/css/xterm.css';
 import './styles.css';
 
 Chart.register(...registerables);
@@ -17,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="tabs">
                 <button class="tab-link active" data-tab="dashboard">Dashboard</button>
                 <button class="tab-link" data-tab="files">Arquivos</button>
+                <button class="tab-link" data-tab="terminal">Terminal</button>
             </div>
             <div id="dashboard" class="tab-content active">
                 <div id="dashboard-welcome">Selecione uma conexão para ver as métricas.</div>
@@ -37,11 +41,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div id="media-view" class="view media-viewer" style="display: none;"></div>
                 </div>
             </div>
+            <div id="terminal" class="tab-content">
+                <div id="terminal-container"></div>
+            </div>
         </div>
         <div id="context-menu" class="context-menu"></div>
     `;
 
-    // --- Element Selectors ---
+    // --- Selectors ---
     const connectionsList = document.getElementById('connections-list');
     const addNewConnectionBtn = document.getElementById('add-new-connection-btn');
     const tabs = document.querySelectorAll('.tab-link');
@@ -61,29 +68,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const cpuText = document.getElementById('cpu-text');
     const memText = document.getElementById('mem-text');
     const diskText = document.getElementById('disk-text');
-    let cpuChart, memChart, diskChart;
+    const terminalContainer = document.getElementById('terminal-container');
 
-    // --- State Variables ---
-    let currentConnections = [];
-    let activeConnectionId = null;
-    let currentPath = '/';
-    let currentOpenFile = null;
-    let editor;
-    let cleanupMetricsListener = null;
+    // --- State ---
+    let currentConnections = [], activeConnectionId = null, currentPath = '/', currentOpenFile = null;
+    let editor, cpuChart, memChart, diskChart, term, fitAddon;
+    let cleanupMetricsListener = null, cleanupTerminalListener = null;
 
     // --- Constants ---
     const swalTheme = { background: '#282c34', color: '#abb2bf', confirmButtonColor: '#2c5364', cancelButtonColor: '#e06c75' };
     const MEDIA_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp4', 'webm', 'ogg', 'ico'];
-    const BINARY_EXTENSIONS = [
-      'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp4', 'webm', 'ogg', 'ico', 'bmp', 'tif', 'tiff', 'mov', 'avi', 'mkv',
-      'mp3', 'wav', 'flac', 'aac',
-      'woff', 'woff2', 'ttf', 'eot', 'otf',
-      'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'exe', 'dll', 'so', 'a', 'lib', 'jar', 'war', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'iso', 'dmg', 'bin'
-    ];
-
-    // --- Chart Setup ---
-    const createChart = (ctx, type, data) => new Chart(ctx, { type, data, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    const BINARY_EXTENSIONS = [ 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp4', 'webm', 'ogg', 'ico', 'bmp', 'tif', 'tiff', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'flac', 'aac', 'woff', 'woff2', 'ttf', 'eot', 'otf', 'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'exe', 'dll', 'so', 'a', 'lib', 'jar', 'war', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'iso', 'dmg', 'bin' ];
     
+    // --- Initializations ---
+    const createChart = (ctx, type, data) => new Chart(ctx, { type, data, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
     const initCharts = () => {
         if (cpuChart) cpuChart.destroy();
         if (memChart) memChart.destroy();
@@ -93,23 +91,52 @@ document.addEventListener('DOMContentLoaded', () => {
         diskChart = createChart(document.getElementById('diskChart').getContext('2d'), 'doughnut', { labels: ['Used', 'Free'], datasets: [{ data: [0, 100], backgroundColor: ['#e06c75', '#3a3f4b'], borderWidth: 0 }] });
     };
 
-    // --- Editor Setup ---
-    editor = monaco.editor.create(editorContainer, {
-        value: '// Selecione um arquivo para editar', language: 'plaintext', theme: 'vs-dark', automaticLayout: true, readOnly: true
-    });
+    editor = monaco.editor.create(editorContainer, { value: '// Selecione um arquivo para editar', language: 'plaintext', theme: 'vs-dark', automaticLayout: true, readOnly: true });
     editor.onDidChangeModelContent(() => { if (currentOpenFile) saveFileBtn.disabled = false; });
+
+    // --- Terminal Management ---
+    const setupTerminal = () => {
+        if (term) term.dispose();
+        if (cleanupTerminalListener) cleanupTerminalListener();
+
+        term = new Terminal({ cursorBlink: true, theme: { background: '#21252b', foreground: '#abb2bf' } });
+        fitAddon = new FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(terminalContainer);
+        fitAddon.fit();
+
+        window.ssm.terminalStart(activeConnectionId);
+        
+        term.onData(data => window.ssm.terminalWrite(data));
+        cleanupTerminalListener = window.ssm.onTerminalData(data => term.write(data));
+    };
+
+    const destroyTerminal = () => {
+        if (term) {
+            term.dispose();
+            term = null;
+        }
+        if (cleanupTerminalListener) {
+            cleanupTerminalListener();
+            cleanupTerminalListener = null;
+        }
+        window.ssm.terminalStop();
+    };
     
     // --- UI & View Management ---
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            tabContents.forEach(content => {
-                content.classList.remove('active');
-                if (content.id === tab.dataset.tab) {
-                    content.classList.add('active');
-                }
-            });
+            tabContents.forEach(c => c.classList.remove('active'));
+            const activeTabContent = document.getElementById(tab.dataset.tab);
+            activeTabContent.classList.add('active');
+
+            if (tab.dataset.tab === 'terminal' && activeConnectionId) {
+                setupTerminal();
+            } else {
+                destroyTerminal();
+            }
         });
     });
 
@@ -117,19 +144,22 @@ document.addEventListener('DOMContentLoaded', () => {
         activeConnectionId = connId;
         renderConnections();
 
-        if (cleanupMetricsListener) {
-            cleanupMetricsListener();
-            cleanupMetricsListener = null;
-        }
+        if (cleanupMetricsListener) { cleanupMetricsListener(); cleanupMetricsListener = null; }
+        destroyTerminal();
+        window.ssm.stopMetrics();
 
         if (activeConnectionId) {
             window.ssm.startMetrics(activeConnectionId);
+            cleanupMetricsListener = window.ssm.onMetricsUpdate(updateDashboard);
             dashboardWelcome.style.display = 'none';
             dashboardContent.style.display = 'grid';
             initCharts();
-            cleanupMetricsListener = window.ssm.onMetricsUpdate(updateDashboard);
+            
+            const activeTab = document.querySelector('.tab-link.active');
+            if (activeTab && activeTab.dataset.tab === 'terminal') {
+                setupTerminal();
+            }
         } else {
-            window.ssm.stopMetrics(null); // Stop any active polling
             dashboardWelcome.style.display = 'block';
             dashboardContent.style.display = 'none';
         }
@@ -141,202 +171,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (connId) fetchAndRenderFiles('/');
     };
     
-    const updateDashboard = (metrics) => {
-        if (!activeConnectionId) return;
-        if (metrics.status === 'error') {
-            uptimeText.textContent = `Erro ao carregar: ${metrics.message}`;
-            return;
-        }
-        const { uptime, memory, disk, cpu } = metrics.data;
-        uptimeText.textContent = uptime;
-        cpuText.textContent = `${cpu}%`;
-        memText.textContent = `${memory.used} / ${memory.total} MB`;
-        diskText.textContent = `${disk.used} / ${disk.total} (${disk.percent})`;
-
-        cpuChart.data.datasets[0].data = [cpu, 100 - cpu];
-        cpuChart.update('none');
-        memChart.data.datasets[0].data = [memory.used, memory.free];
-        memChart.update('none');
-        const diskPercent = parseInt(disk.percent.replace('%', ''));
-        diskChart.data.datasets[0].data = [diskPercent, 100 - diskPercent];
-        diskChart.update('none');
-    };
-    
-    const resetPanes = () => {
-        showView(editorView);
-        editor.setValue('// Selecione um arquivo para editar');
-        editor.updateOptions({ readOnly: true });
-        monaco.editor.setModelLanguage(editor.getModel(), 'plaintext');
-        openFileNameEl.textContent = 'Nenhum arquivo aberto';
-        saveFileBtn.disabled = true;
-        currentOpenFile = null;
-    };
-
-    const showView = (viewToShow) => {
-        editorView.style.display = 'none';
-        mediaView.style.display = 'none';
-        viewToShow.style.display = viewToShow === editorView ? 'flex' : 'block';
-    };
-
-    const fetchAndRenderFiles = async (path) => {
-        if (!activeConnectionId) return;
-        currentPathEl.textContent = 'Carregando...';
-        fileList.innerHTML = '';
-        try {
-            const files = await window.ssm.sftpList(activeConnectionId, path);
-            currentPath = path;
-            currentPathEl.textContent = path;
-            if (path !== '/') fileList.innerHTML += `<li class="file-item parent-dir" data-path="${path.substring(0, path.lastIndexOf('/')) || '/'}">..</li>`;
-            files.sort((a, b) => b.isDirectory - a.isDirectory || a.name.localeCompare(b.name));
-            files.forEach(file => {
-                const icon = file.isDirectory ? '📁' : '📄';
-                const li = document.createElement('li');
-                li.className = 'file-item';
-                li.innerHTML = `${icon} ${file.name}`;
-                li.dataset.path = `${path.endsWith('/') ? path : path + '/'}${file.name}`;
-                li.dataset.name = file.name;
-                li.dataset.type = file.isDirectory ? 'dir' : 'file';
-                fileList.appendChild(li);
-            });
-        } catch (error) {
-            Swal.fire({ title: 'Erro SFTP', text: `Não foi possível listar arquivos: ${error.message}`, icon: 'error', ...swalTheme });
-            currentPathEl.textContent = 'Erro ao carregar';
-        }
-    };
-    
-    const renderConnections = () => {
-        connectionsList.innerHTML = '';
-        currentConnections.forEach(conn => {
-            const li = document.createElement('li');
-            li.dataset.id = conn.id;
-            if (conn.id === activeConnectionId) li.classList.add('active');
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = conn.name;
-            nameSpan.title = `${conn.user}@${conn.host}`;
-            li.appendChild(nameSpan);
-            const deleteBtn = document.createElement('button');
-            deleteBtn.innerHTML = '&times;';
-            deleteBtn.className = 'delete-btn';
-            deleteBtn.title = 'Excluir Conexão';
-            li.appendChild(deleteBtn);
-            li.addEventListener('click', (e) => (e.target !== deleteBtn) && updateUIForConnection(conn.id));
-            deleteBtn.addEventListener('click', () => handleDeleteClick(conn));
-            connectionsList.appendChild(li);
-        });
-    };
-
-    const loadConnections = async () => {
-        currentConnections = await window.ssm.listConnections();
-        renderConnections();
-    };
-
-    const openFile = async (filePath) => {
-        const fileName = filePath.split('/').pop();
-        const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
-        if (MEDIA_EXTENSIONS.includes(extension)) await openMediaFile(filePath, extension);
-        else if (BINARY_EXTENSIONS.includes(extension)) Swal.fire({ title: 'Arquivo Binário', text: `Arquivos do tipo ".${extension}" não podem ser abertos. Tente baixá-los.`, icon: 'info', ...swalTheme });
-        else await openTextFile(filePath, extension);
-    };
-
-    const openTextFile = async (filePath, extension) => {
-        showView(editorView);
-        openFileNameEl.textContent = 'Carregando...';
-        try {
-            const content = await window.ssm.sftpReadFile(activeConnectionId, filePath);
-            currentOpenFile = filePath;
-            editor.setValue(content);
-            editor.updateOptions({ readOnly: false });
-            openFileNameEl.textContent = filePath;
-            const language = monaco.languages.getLanguages().find(l => l.extensions?.includes(`.${extension}`))?.id || 'plaintext';
-            monaco.editor.setModelLanguage(editor.getModel(), language);
-        } catch (error) {
-            Swal.fire({ title: 'Erro ao Abrir Arquivo', text: `Não foi possível ler o arquivo. Causa provável: Permissões insuficientes.\n\nDetalhes: ${error.message}`, icon: 'error', ...swalTheme });
-            resetPanes();
-        }
-    };
-
-    const openMediaFile = async (filePath, extension) => {
-        showView(mediaView);
-        mediaView.innerHTML = `<p>Carregando ${filePath}...</p>`;
-        try {
-            const base64Content = await window.ssm.sftpReadFileAsBase64(activeConnectionId, filePath);
-            const mimeType = extension === 'svg' ? 'image/svg+xml' : `image/${extension}`;
-            mediaView.innerHTML = `<img src="data:${mimeType};base64,${base64Content}" alt="${filePath}" />`;
-        } catch (error) {
-            Swal.fire({ title: 'Erro ao Carregar Mídia', text: error.message, icon: 'error', ...swalTheme });
-            resetPanes();
-        }
-    };
-    
-    const handleDeleteClick = (conn) => {
-        Swal.fire({ title: 'Confirmar Exclusão', text: `Deseja excluir "${conn.name}"?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, excluir!', cancelButtonText: 'Cancelar', ...swalTheme })
-            .then(async (result) => {
-                if (result.isConfirmed) {
-                    await window.ssm.removeConnection(conn.id);
-                    if (activeConnectionId === conn.id) updateUIForConnection(null);
-                    await loadConnections();
-                    Swal.fire({ title: 'Excluído!', text: 'Conexão removida.', icon: 'success', ...swalTheme });
-                }
-            });
-    };
-
-    const showContextMenu = (e, items) => {
-        contextMenu.innerHTML = '';
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'context-menu-item';
-            div.textContent = item.label;
-            div.onclick = () => { item.action(); contextMenu.style.display = 'none'; };
-            contextMenu.appendChild(div);
-        });
-        contextMenu.style.left = `${e.clientX}px`;
-        contextMenu.style.top = `${e.clientY}px`;
-        contextMenu.style.display = 'block';
-    };
+    const updateDashboard = (metrics) => { if (!activeConnectionId) return; if (metrics.status === 'error') { uptimeText.textContent = `Erro ao carregar: ${metrics.message}`; return; } const { uptime, memory, disk, cpu } = metrics.data; uptimeText.textContent = uptime; cpuText.textContent = `${cpu}%`; memText.textContent = `${memory.used} / ${memory.total} MB`; diskText.textContent = `${disk.used} / ${disk.total} (${disk.percent})`; cpuChart.data.datasets[0].data = [cpu, 100 - cpu]; cpuChart.update('none'); memChart.data.datasets[0].data = [memory.used, memory.free]; memChart.update('none'); const diskPercent = parseInt(disk.percent.replace('%', '')); diskChart.data.datasets[0].data = [diskPercent, 100 - diskPercent]; diskChart.update('none'); };
+    const resetPanes = () => { showView(editorView); editor.setValue('// Selecione um arquivo para editar'); editor.updateOptions({ readOnly: true }); monaco.editor.setModelLanguage(editor.getModel(), 'plaintext'); openFileNameEl.textContent = 'Nenhum arquivo aberto'; saveFileBtn.disabled = true; currentOpenFile = null; };
+    const showView = (viewToShow) => { editorView.style.display = 'none'; mediaView.style.display = 'none'; viewToShow.style.display = viewToShow === editorView ? 'flex' : 'block'; };
+    const fetchAndRenderFiles = async (path) => { if (!activeConnectionId) return; currentPathEl.textContent = 'Carregando...'; fileList.innerHTML = ''; try { const files = await window.ssm.sftpList(activeConnectionId, path); currentPath = path; currentPathEl.textContent = path; if (path !== '/') fileList.innerHTML += `<li class="file-item parent-dir" data-path="${path.substring(0, path.lastIndexOf('/')) || '/'}">..</li>`; files.sort((a, b) => b.isDirectory - a.isDirectory || a.name.localeCompare(b.name)); files.forEach(file => { const icon = file.isDirectory ? '📁' : '📄'; const li = document.createElement('li'); li.className = 'file-item'; li.innerHTML = `${icon} ${file.name}`; li.dataset.path = `${path.endsWith('/') ? path : path + '/'}${file.name}`; li.dataset.name = file.name; li.dataset.type = file.isDirectory ? 'dir' : 'file'; fileList.appendChild(li); }); } catch (error) { Swal.fire({ title: 'Erro SFTP', text: `Não foi possível listar arquivos: ${error.message}`, icon: 'error', ...swalTheme }); currentPathEl.textContent = 'Erro ao carregar'; } };
+    const renderConnections = () => { connectionsList.innerHTML = ''; currentConnections.forEach(conn => { const li = document.createElement('li'); li.dataset.id = conn.id; if (conn.id === activeConnectionId) li.classList.add('active'); const nameSpan = document.createElement('span'); nameSpan.textContent = conn.name; nameSpan.title = `${conn.user}@${conn.host}`; li.appendChild(nameSpan); const deleteBtn = document.createElement('button'); deleteBtn.innerHTML = '&times;'; deleteBtn.className = 'delete-btn'; deleteBtn.title = 'Excluir Conexão'; li.appendChild(deleteBtn); li.addEventListener('click', (e) => (e.target !== deleteBtn) && updateUIForConnection(conn.id)); deleteBtn.addEventListener('click', () => handleDeleteClick(conn)); connectionsList.appendChild(li); }); };
+    const loadConnections = async () => { currentConnections = await window.ssm.listConnections(); renderConnections(); };
+    const openFile = async (filePath) => { const fileName = filePath.split('/').pop(); const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : ''; if (MEDIA_EXTENSIONS.includes(extension)) await openMediaFile(filePath, extension); else if (BINARY_EXTENSIONS.includes(extension)) Swal.fire({ title: 'Arquivo Binário', text: `Arquivos do tipo ".${extension}" não podem ser abertos. Tente baixá-los.`, icon: 'info', ...swalTheme }); else await openTextFile(filePath, extension); };
+    const openTextFile = async (filePath, extension) => { showView(editorView); openFileNameEl.textContent = 'Carregando...'; try { const content = await window.ssm.sftpReadFile(activeConnectionId, filePath); currentOpenFile = filePath; editor.setValue(content); editor.updateOptions({ readOnly: false }); openFileNameEl.textContent = filePath; const language = monaco.languages.getLanguages().find(l => l.extensions?.includes(`.${extension}`))?.id || 'plaintext'; monaco.editor.setModelLanguage(editor.getModel(), language); } catch (error) { Swal.fire({ title: 'Erro ao Abrir Arquivo', text: `Não foi possível ler o arquivo. Causa provável: Permissões insuficientes.\n\nDetalhes: ${error.message}`, icon: 'error', ...swalTheme }); resetPanes(); } };
+    const openMediaFile = async (filePath, extension) => { showView(mediaView); mediaView.innerHTML = `<p>Carregando ${filePath}...</p>`; try { const base64Content = await window.ssm.sftpReadFileAsBase64(activeConnectionId, filePath); const mimeType = extension === 'svg' ? 'image/svg+xml' : `image/${extension}`; mediaView.innerHTML = `<img src="data:${mimeType};base64,${base64Content}" alt="${filePath}" />`; } catch (error) { Swal.fire({ title: 'Erro ao Carregar Mídia', text: error.message, icon: 'error', ...swalTheme }); resetPanes(); } };
+    const handleDeleteClick = (conn) => { Swal.fire({ title: 'Confirmar Exclusão', text: `Deseja excluir "${conn.name}"?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, excluir!', cancelButtonText: 'Cancelar', ...swalTheme }).then(async (result) => { if (result.isConfirmed) { await window.ssm.removeConnection(conn.id); if (activeConnectionId === conn.id) updateUIForConnection(null); await loadConnections(); Swal.fire({ title: 'Excluído!', text: 'Conexão removida.', icon: 'success', ...swalTheme }); } }); };
+    const showContextMenu = (e, items) => { contextMenu.innerHTML = ''; items.forEach(item => { const div = document.createElement('div'); div.className = 'context-menu-item'; div.textContent = item.label; div.onclick = () => { item.action(); contextMenu.style.display = 'none'; }; contextMenu.appendChild(div); }); contextMenu.style.left = `${e.clientX}px`; contextMenu.style.top = `${e.clientY}px`; contextMenu.style.display = 'block'; };
     
     // --- Event Listeners ---
     fileList.addEventListener('click', (e) => { const li = e.target.closest('li.file-item'); if (!li) return; if (li.dataset.type === 'dir' || li.classList.contains('parent-dir')) fetchAndRenderFiles(li.dataset.path); else openFile(li.dataset.path); });
-
-    saveFileBtn.addEventListener('click', async () => {
-        if (!currentOpenFile || saveFileBtn.disabled) return;
-        const content = editor.getValue();
-        Swal.fire({ title: 'Salvando...', text: `Salvando ${currentOpenFile}`, allowOutsideClick: false, didOpen: () => Swal.showLoading(), ...swalTheme });
-        try {
-            await window.ssm.sftpWriteFile(activeConnectionId, currentOpenFile, content);
-            saveFileBtn.disabled = true;
-            Swal.fire({ title: 'Salvo!', text: `${currentOpenFile} foi salvo com sucesso.`, icon: 'success', ...swalTheme });
-        } catch (error) {
-            Swal.fire({ title: 'Erro ao Salvar', text: error.message, icon: 'error', ...swalTheme });
-        }
-    });
-
-    fileExplorer.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        const target = e.target.closest('.file-item');
-        const remotePath = target?.dataset.path; const itemName = target?.dataset.name; const itemType = target?.dataset.type;
-        let menuItems = [{
-            label: 'Criar Nova Pasta',
-            action: async () => {
-                const { value: folderName } = await Swal.fire({ title: 'Nome da Nova Pasta', input: 'text', inputPlaceholder: 'nome_da_pasta', showCancelButton: true, ...swalTheme });
-                if (folderName && folderName.trim()) {
-                    await window.ssm.sftpCreateDir(activeConnectionId, `${currentPath.endsWith('/') ? currentPath : currentPath + '/'}${folderName.trim()}`);
-                    fetchAndRenderFiles(currentPath);
-                }
-            }
-        }];
-        if (target) {
-            if (itemType === 'file') {
-                menuItems.unshift({ label: 'Baixar Arquivo', action: async () => { const result = await window.ssm.sftpDownloadFile(activeConnectionId, remotePath); if (result.success) Swal.fire({ title: 'Download Concluído', text: `Arquivo salvo em: ${result.path}`, icon: 'success', ...swalTheme }); }});
-                menuItems.unshift({ label: 'Excluir Arquivo', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir "${itemName}"?`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { await window.ssm.sftpDeleteFile(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } }); }});
-            } else if (itemType === 'dir') {
-                 menuItems.unshift({ label: 'Excluir Pasta', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir pasta "${itemName}"? A pasta deve estar vazia.`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { try { await window.ssm.sftpDeleteDir(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } catch(err) { Swal.fire({ title: 'Erro', text: 'Não foi possível excluir. A pasta pode não estar vazia.', icon: 'error', ...swalTheme }); } } }); }});
-            }
-        }
-        showContextMenu(e, menuItems);
-    });
-
+    saveFileBtn.addEventListener('click', async () => { if (!currentOpenFile || saveFileBtn.disabled) return; const content = editor.getValue(); Swal.fire({ title: 'Salvando...', text: `Salvando ${currentOpenFile}`, allowOutsideClick: false, didOpen: () => Swal.showLoading(), ...swalTheme }); try { await window.ssm.sftpWriteFile(activeConnectionId, currentOpenFile, content); saveFileBtn.disabled = true; Swal.fire({ title: 'Salvo!', text: `${currentOpenFile} foi salvo com sucesso.`, icon: 'success', ...swalTheme }); } catch (error) { Swal.fire({ title: 'Erro ao Salvar', text: error.message, icon: 'error', ...swalTheme }); } });
+    fileExplorer.addEventListener('contextmenu', (e) => { e.preventDefault(); const target = e.target.closest('.file-item'); const remotePath = target?.dataset.path; const itemName = target?.dataset.name; const itemType = target?.dataset.type; let menuItems = [{ label: 'Criar Nova Pasta', action: async () => { const { value: folderName } = await Swal.fire({ title: 'Nome da Nova Pasta', input: 'text', inputPlaceholder: 'nome_da_pasta', showCancelButton: true, ...swalTheme }); if (folderName && folderName.trim()) { await window.ssm.sftpCreateDir(activeConnectionId, `${currentPath.endsWith('/') ? currentPath : currentPath + '/'}${folderName.trim()}`); fetchAndRenderFiles(currentPath); } } }]; if (target) { if (itemType === 'file') { menuItems.unshift({ label: 'Baixar Arquivo', action: async () => { const result = await window.ssm.sftpDownloadFile(activeConnectionId, remotePath); if (result.success) Swal.fire({ title: 'Download Concluído', text: `Arquivo salvo em: ${result.path}`, icon: 'success', ...swalTheme }); }}); menuItems.unshift({ label: 'Excluir Arquivo', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir "${itemName}"?`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { await window.ssm.sftpDeleteFile(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } }); }}); } else if (itemType === 'dir') { menuItems.unshift({ label: 'Excluir Pasta', action: async () => { Swal.fire({ title: 'Confirmar', text: `Excluir pasta "${itemName}"? A pasta deve estar vazia.`, icon: 'warning', showCancelButton: true, ...swalTheme }).then(async (r) => { if (r.isConfirmed) { try { await window.ssm.sftpDeleteDir(activeConnectionId, remotePath); fetchAndRenderFiles(currentPath); } catch(err) { Swal.fire({ title: 'Erro', text: 'Não foi possível excluir. A pasta pode não estar vazia.', icon: 'error', ...swalTheme }); } } }); }}); } } showContextMenu(e, menuItems); });
     window.addEventListener('click', () => contextMenu.style.display = 'none');
-    
     addNewConnectionBtn.addEventListener('click', () => {
         let validatedConnectionData = null;
         Swal.fire({

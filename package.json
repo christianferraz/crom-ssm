@@ -24,7 +24,9 @@
     "ssh2": "^1.15.0",
     "sweetalert2": "^11.10.8",
     "winston": "^3.13.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",

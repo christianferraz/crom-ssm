@@ -25,11 +25,23 @@ contextBridge.exposeInMainWorld('ssm', {
 
   // MetricsService methods
   startMetrics: (connectionId) => ipcRenderer.send('ssm:metrics:start', connectionId),
-  stopMetrics: (connectionId) => ipcRenderer.send('ssm:metrics:stop', connectionId),
+  stopMetrics: () => ipcRenderer.send('ssm:metrics:stop'),
   onMetricsUpdate: (callback) => {
     const channel = 'ssm:metrics:update';
-    ipcRenderer.on(channel, (event, data) => callback(data));
-    // Return a cleanup function
-    return () => ipcRenderer.removeAllListeners(channel);
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+
+  // TerminalService methods
+  terminalStart: (connectionId) => ipcRenderer.send('ssm:terminal:start', connectionId),
+  terminalStop: () => ipcRenderer.send('ssm:terminal:stop'),
+  terminalWrite: (data) => ipcRenderer.send('ssm:terminal:write', data),
+  terminalResize: (cols, rows) => ipcRenderer.send('ssm:terminal:resize', { cols, rows }),
+  onTerminalData: (callback) => {
+    const channel = 'ssm:terminal:data';
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
   }
 });
