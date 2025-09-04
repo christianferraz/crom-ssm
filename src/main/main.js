@@ -20,7 +20,8 @@ function createWindow() {
   });
 
   // Load the welcome screen first
-  mainWindow.loadFile(path.join(__dirname, '../../dist/welcome.html'));
+  // path.join with __dirname is crucial for asar packaging
+  mainWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'welcome.html'));
   logger.info('Janela principal criada, carregando a tela de boas-vindas.');
   
   mainWindow.once('ready-to-show', () => {
@@ -33,7 +34,7 @@ function createWindow() {
 ipcMain.on('navigate:to:main', () => {
     logger.info("Recebido evento para navegar para a aplicação principal.");
     if (mainWindow) {
-        mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+        mainWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
     }
 });
 
