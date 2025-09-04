@@ -1,4 +1,4 @@
-# Crom-SSM (Simple Server Manager)
+# Crom-SSM (Secure Shell Monitor)
 
 ![License](https://img.shields.io/badge/license-ISC-blue.svg) ![Version](https://img.shields.io/badge/version-1.0.0-brightgreen.svg)
 
@@ -72,7 +72,7 @@ Para executar o projeto localmente, siga estes passos:
 
 1.  **Clone o repositório:**
     ```sh
-    git clone https://github.com/seu-usuario/crom-ssm.git
+    git clone https://github.com/Mrjs01/crom-ssm.git
     cd crom-ssm
     ```
 
