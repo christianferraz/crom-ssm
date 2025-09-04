@@ -16,11 +16,16 @@ async function getAuthConfig(connData, useRawPassword = false) {
         host: connData.host, port: connData.port || 22, username: connData.user,
     };
     if (connData.authMethod === 'password') {
-        authConfig.password = useRawPassword ? connData.password : await connectionService.getPassword(connData.id);
+        const password = useRawPassword ? connData.password : await connectionService.getPassword(connData.id);
+        if (password) { // Only add password if it exists
+            authConfig.password = password;
+        }
     } else if (connData.authMethod === 'key' && connData.keyPath) {
         try { authConfig.privateKey = await fs.readFile(connData.keyPath); } 
         catch (error) { throw new Error(`Falha ao ler a chave privada em ${connData.keyPath}`); }
-    } else { throw new Error('Método de autenticação inválido ou credenciais ausentes.'); }
+    } else if (connData.authMethod !== 'key' && connData.authMethod !== 'password') {
+      throw new Error('Método de autenticação inválido ou credenciais ausentes.');
+    }
     return authConfig;
 }
 
@@ -43,11 +48,16 @@ function registerIpcHandlers() {
   // Connection Handlers
   handle('ssm:connections:list', () => connectionService.list());
   handle('ssm:connections:add', (evt, d) => connectionService.add(d));
+  handle('ssm:connections:update', (evt, id, d) => connectionService.update(id, d));
   handle('ssm:connections:remove', (evt, id) => connectionService.remove(id));
   handle('ssm:connections:setPassword', (evt, id, p) => connectionService.setPassword(id, p));
   
   handle('ssm:ssh:test', async (event, connData) => {
     const authConfig = await getAuthConfig(connData, true);
+    // If password is not provided for password auth, and it's an existing connection, try fetching it.
+    if(connData.id && connData.authMethod === 'password' && !connData.password) {
+        authConfig.password = await connectionService.getPassword(connData.id);
+    }
     const sftp = new SFTPService(authConfig);
     try { 
         await sftp.connect(); 
@@ -78,6 +88,7 @@ function registerIpcHandlers() {
   handle('ssm:sftp:deleteFile', (evt, id, p) => sftpAction(id, sftp => sftp.deleteFile(p)));
   handle('ssm:sftp:deleteDir', (evt, id, p) => sftpAction(id, sftp => sftp.deleteDir(p)));
   handle('ssm:sftp:createDir', (evt, id, p) => sftpAction(id, sftp => sftp.createDir(p)));
+  handle('ssm:sftp:rename', (evt, id, op, np) => sftpAction(id, sftp => sftp.rename(op, np)));
   
   handle('ssm:sftp:downloadFile', async (evt, connId, remotePath) => {
       const defaultFileName = path.basename(remotePath);

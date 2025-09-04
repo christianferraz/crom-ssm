@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('ssm', {
   // ConnectionService methods
   listConnections: () => ipcRenderer.invoke('ssm:connections:list'),
   addConnection: (connectionData) => ipcRenderer.invoke('ssm:connections:add', connectionData),
+  updateConnection: (id, connectionData) => ipcRenderer.invoke('ssm:connections:update', id, connectionData),
   removeConnection: (id) => ipcRenderer.invoke('ssm:connections:remove', id),
   setPassword: (id, password) => ipcRenderer.invoke('ssm:connections:setPassword', id, password),
 
@@ -23,6 +24,7 @@ contextBridge.exposeInMainWorld('ssm', {
   sftpCreateDir: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:createDir', connectionId, remotePath),
   sftpDownloadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:downloadFile', connectionId, remotePath),
   sftpUploadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:uploadFile', connectionId, remotePath),
+  sftpRename: (connectionId, oldPath, newPath) => ipcRenderer.invoke('ssm:sftp:rename', connectionId, oldPath, newPath),
 
   // MetricsService methods
   startMetrics: (connectionId) => ipcRenderer.send('ssm:metrics:start', connectionId),

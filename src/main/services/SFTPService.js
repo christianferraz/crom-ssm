@@ -72,6 +72,12 @@ class SFTPService {
             this.sftp.mkdir(remotePath, (err) => err ? reject(err) : resolve());
         });
     }
+
+    rename(oldPath, newPath) {
+        return new Promise((resolve, reject) => {
+            this.sftp.rename(oldPath, newPath, (err) => err ? reject(err) : resolve());
+        });
+    }
     
     downloadFile(remotePath, localPath) {
         return new Promise((resolve, reject) => {

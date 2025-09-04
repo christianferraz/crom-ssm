@@ -2,6 +2,7 @@
     --bg-primary: #282c34; --bg-secondary: #21252b; --bg-tertiary: #3a3f4b;
     --text-primary: #abb2bf; --text-secondary: #8c92a3; --border-color: #4f5666;
     --error-color: #e06c75; --success-color: #98c379;
+    --info-color: #61afef;
     --grad-green: #2c5364; --grad-yellow: #f0cb35;
     --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
@@ -12,11 +13,13 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 .sidebar-header { padding: 20px; }
 .sidebar-header h2 { margin: 0; font-weight: 500; }
 .connections-list { list-style: none; padding: 0 10px; margin: 0; flex: 1; overflow-y: auto; }
-.connections-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-bottom: 8px; font-size: 15px; transition: background-color 0.2s; word-break: break-all; }
+.connections-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-bottom: 8px; font-size: 15px; transition: background-color 0.2s; }
+.connections-list li span { flex: 1; word-break: break-all; margin-right: 5px;}
 .connections-list li:hover { background: var(--bg-tertiary); }
 .connections-list li.active { background: linear-gradient(to right, var(--grad-green), var(--grad-yellow)); color: #fff; font-weight: 500; }
-.delete-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 18px; line-height: 1; padding: 5px; border-radius: 4px; opacity: 0; transition: opacity 0.2s; }
-.connections-list li:hover .delete-btn { opacity: 1; }
+.edit-btn, .delete-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 16px; line-height: 1; padding: 5px; border-radius: 4px; opacity: 0; transition: all 0.2s; }
+.connections-list li:hover .edit-btn, .connections-list li:hover .delete-btn { opacity: 1; }
+.edit-btn:hover { color: var(--info-color); }
 .delete-btn:hover { color: var(--error-color); }
 .add-btn { background: var(--bg-tertiary); border: none; color: var(--text-primary); padding: 15px; margin: 10px; border-radius: 6px; cursor: pointer; font-size: 16px; }
 .add-btn:hover { background: var(--grad-green); color: #fff; }
