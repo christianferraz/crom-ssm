@@ -46,13 +46,17 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 
 #dashboard { padding: 20px; flex-direction: column; justify-content: center; align-items: center; }
 #dashboard-welcome { font-size: 1.2em; color: var(--text-secondary); }
-.dashboard-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; width: 100%; height: 100%; }
+.dashboard-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; width: 100%; height: 100%; }
 .card { background: var(--bg-primary); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
 .card-header { font-weight: 500; color: var(--text-secondary); margin-bottom: 15px; }
 .card-body { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
 .card.uptime-card .card-body { font-size: 1.5em; font-weight: 500; }
 .card canvas { max-height: 150px; }
 .card p { position: absolute; margin: 0; font-size: 1.2em; font-weight: 500; }
+.sys-info-grid, .network-info { flex-direction: column; align-items: flex-start; justify-content: center; width: 100%; font-size: 14px; }
+.sys-info-grid p, .network-info p { position: static; width: 100%; line-height: 1.6; }
+.sys-info-grid span, .network-info span { color: var(--text-primary); font-weight: 400; }
+.sys-info-grid strong, .network-info strong { color: var(--text-secondary); font-weight: 500; min-width: 60px; display: inline-block; }
 
 .file-explorer { width: 300px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; user-select: none; height: 100%; }
 .file-explorer-header { padding: 15px; border-bottom: 1px solid var(--border-color); }
