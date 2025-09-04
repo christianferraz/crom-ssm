@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 class ConnectionModel {
-  constructor({ id, name, host, port = 22, user, authMethod = 'key', keyPath = null, lastSeen = null }) {
+  constructor({ id, name, host, port = 22, user, authMethod = 'key', keyPath = null, lastSeen = null, monitoredServices = [] }) {
     this.id = id || crypto.randomUUID();
     this.name = name;
     this.host = host;
@@ -10,6 +10,7 @@ class ConnectionModel {
     this.authMethod = authMethod; // 'key' or 'password'
     this.keyPath = keyPath;
     this.lastSeen = lastSeen;
+    this.monitoredServices = monitoredServices;
   }
 }
 

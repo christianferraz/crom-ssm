@@ -14,6 +14,11 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 .sidebar-header h2 { margin: 0; font-weight: 500; }
 .connections-list { list-style: none; padding: 0 10px; margin: 0; flex: 1; overflow-y: auto; }
 .connections-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-bottom: 8px; font-size: 15px; transition: background-color 0.2s; }
+.connections-list li .connection-status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; background-color: var(--text-secondary); }
+.connections-list li .connection-status-dot.status-active { background-color: var(--success-color); }
+.connections-list li .connection-status-dot.status-error { background-color: var(--error-color); }
+.connections-list li .connection-status-dot.status-loading { animation: pulse 1.5s infinite ease-in-out; background-color: var(--info-color); }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
 .connections-list li span { flex: 1; word-break: break-all; margin-right: 5px;}
 .connections-list li:hover { background: var(--bg-tertiary); }
 .connections-list li.active { background: linear-gradient(to right, var(--grad-green), var(--grad-yellow)); color: #fff; font-weight: 500; }
@@ -23,8 +28,13 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 .delete-btn:hover { color: var(--error-color); }
 .add-btn { background: var(--bg-tertiary); border: none; color: var(--text-primary); padding: 15px; margin: 10px; border-radius: 6px; cursor: pointer; font-size: 16px; }
 .add-btn:hover { background: var(--grad-green); color: #fff; }
+.sidebar-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
+.sidebar-tab-link { flex: 1; background: none; border: none; padding: 12px; font-size: 14px; color: var(--text-secondary); cursor: pointer; }
+.sidebar-tab-link.active { color: var(--text-primary); background: var(--bg-tertiary); }
+.sidebar-tab-content { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.sidebar-tab-content.active { display: flex; }
 
-.main-content { flex: 1; display: flex; flex-direction: column; }
+.main-content { flex: 1; display: flex; flex-direction: column; position: relative; }
 .tabs { display: flex; background: var(--bg-primary); }
 .tab-link { background: none; border: none; color: var(--text-secondary); padding: 15px 20px; cursor: pointer; font-size: 16px; border-bottom: 3px solid transparent; }
 .tab-link.active { color: var(--text-primary); border-bottom: 3px solid var(--grad-yellow); }
@@ -44,19 +54,24 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 .terminal-pane { display: none; width: 100%; height: 100%; }
 .terminal-pane.active { display: block; }
 
-#dashboard { padding: 20px; flex-direction: column; justify-content: center; align-items: center; }
-#dashboard-welcome { font-size: 1.2em; color: var(--text-secondary); }
-.dashboard-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; width: 100%; height: 100%; }
+#dashboard { padding: 20px; flex-direction: column; justify-content: flex-start; align-items: center; overflow-y: auto; }
+#dashboard-welcome { font-size: 1.2em; color: var(--text-secondary); margin: auto; }
+.dashboard-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; width: 100%; }
 .card { background: var(--bg-primary); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
 .card-header { display: flex; justify-content: space-between; align-items: center; font-weight: 500; color: var(--text-secondary); margin-bottom: 15px; }
 .card-header span:last-child { color: var(--text-primary); font-weight: 400; }
 .card-body { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
 .chart-card-body { padding-top: 10px; }
 .card.uptime-card .card-body { font-size: 1.5em; font-weight: 500; }
-.sys-info-grid, .network-info { flex-direction: column; align-items: flex-start; justify-content: center; width: 100%; font-size: 14px; }
-.sys-info-grid p, .network-info p { position: static; width: 100%; line-height: 1.6; margin: 4px 0; }
+.sys-info-grid, .network-info, .services-list { flex-direction: column; align-items: flex-start; justify-content: center; width: 100%; font-size: 14px; }
+.sys-info-grid p, .network-info p, .services-list p { position: static; width: 100%; line-height: 1.6; margin: 4px 0; }
 .sys-info-grid span, .network-info span { color: var(--text-primary); font-weight: 400; }
 .sys-info-grid strong, .network-info strong { color: var(--text-secondary); font-weight: 500; min-width: 60px; display: inline-block; }
+.service-item { display: flex; align-items: center; width: 100%; margin: 4px 0; }
+.status-dot { height: 10px; width: 10px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
+.status-dot.status-active { background-color: var(--success-color); }
+.status-dot.status-inactive, .status-dot.status-deactivating { background-color: var(--text-secondary); }
+.status-dot.status-failed { background-color: var(--error-color); }
 
 .file-explorer { width: 300px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; user-select: none; height: 100%; }
 .file-explorer-header { padding: 15px; border-bottom: 1px solid var(--border-color); }
@@ -102,3 +117,13 @@ html, body, #app { height: 100%; margin: 0; overflow: hidden; font-family: var(-
 .swal2-actions { gap: 10px; }
 .swal2-confirm { background-color: var(--grad-green) !important; }
 .swal2-validation-message { background-color: var(--bg-primary) !important; color: var(--error-color) !important; }
+
+.loading-overlay { position: absolute; top: 53px; /* Abaixo das abas */ left: 0; right: 0; bottom: 0; background: rgba(33, 37, 43, 0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; }
+.loading-overlay.hidden { display: none; }
+.spinner { width: 50px; height: 50px; border: 5px solid var(--border-color); border-top-color: var(--grad-yellow); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #4f5666; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #5a6275; }

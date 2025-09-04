@@ -150,7 +150,7 @@ function registerIpcHandlers() {
     const conn = await connectionService.get(connectionId); 
     if (conn) { 
         const authConfig = await getAuthConfig(conn); 
-        activeMetricsService = new MetricsService(authConfig, event.sender); 
+        activeMetricsService = new MetricsService(conn, authConfig, event.sender); 
         activeMetricsService.connectAndStartPolling(); 
     } 
   });

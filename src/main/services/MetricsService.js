@@ -2,8 +2,9 @@ const SSHService = require('./SSHService');
 const logger = require('../utils/logger');
 
 class MetricsService {
-    constructor(connectionConfig, webContents) {
-        this.sshService = new SSHService(connectionConfig);
+    constructor(connection, sshConfig, webContents) {
+        this.connection = connection;
+        this.sshService = new SSHService(sshConfig);
         this.webContents = webContents;
         this.interval = null;
         this.lastNetStats = null;
@@ -34,13 +35,18 @@ class MetricsService {
                 network: "cat /proc/net/dev"
             };
 
-            const [uptime, memory, disk, cpu, system, network] = await Promise.all([
+            const services = this.connection.monitoredServices || [];
+            const serviceCommands = services.map(s => `systemctl is-active ${s.trim()}`);
+            const servicePromises = serviceCommands.map(cmd => this.sshService.exec(cmd).catch(e => ({ stdout: 'failed' })));
+
+            const [uptime, memory, disk, cpu, system, network, ...serviceResults] = await Promise.all([
                 this.sshService.exec(commands.uptime),
                 this.sshService.exec(commands.memory),
                 this.sshService.exec(commands.disk),
                 this.sshService.exec(commands.cpu),
                 this.sshService.exec(commands.system),
                 this.sshService.exec(commands.network),
+                ...servicePromises
             ]);
 
             const metrics = {
@@ -49,10 +55,11 @@ class MetricsService {
                 disk: this.parseDisk(disk.stdout),
                 cpu: parseFloat(cpu.stdout.trim()).toFixed(1),
                 system: this.parseSystem(system.stdout),
-                network: this.parseNetwork(network.stdout)
+                network: this.parseNetwork(network.stdout),
+                services: services.map((name, i) => ({ name, status: serviceResults[i].stdout }))
             };
             
-            this.webContents.send('ssm:metrics:update', { status: 'success', data: metrics });
+            this.emitSuccess(metrics);
         } catch (error) {
             logger.error(`[Metrics] Erro ao buscar métricas: ${error.message}`);
             this.emitError(error);
@@ -101,7 +108,13 @@ class MetricsService {
         this.lastNetStats = { bytesIn, bytesOut };
         this.lastNetStatsTimestamp = now;
 
-        return { in: inRate, out: outRate };
+        return { in: inRate >= 0 ? inRate : '0.0', out: outRate >= 0 ? outRate : '0.0' };
+    }
+
+    emitSuccess(data) {
+        if (this.webContents && !this.webContents.isDestroyed()) {
+            this.webContents.send('ssm:metrics:update', { status: 'success', data });
+        }
     }
 
     emitError(error) {
