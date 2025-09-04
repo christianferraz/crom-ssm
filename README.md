@@ -4,7 +4,7 @@
 
 Um Gerenciador de Servidores Simples, Leve e Moderno, construído com Electron, para centralizar suas tarefas de DevOps e administração de sistemas em uma única interface limpa e reativa.
 
-![Screenshot do Crom-SSM](https://i.imgur.com/link-para-screenshot.png) 
+![Screenshot do Crom-SSM](https://crom.live/wp-content/uploads/2025/09/download-4.png) 
 *(Nota: Substitua o link acima por um screenshot real da aplicação)*
 
 ---
