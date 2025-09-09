@@ -1,11 +1,11 @@
-const crypto = require('crypto');
+import { randomUUID } from 'crypto';
 
 class SnippetModel {
   constructor({ id, name, command }) {
-    this.id = id || crypto.randomUUID();
+    this.id = id || randomUUID();
     this.name = name;
     this.command = command;
   }
 }
 
-module.exports = SnippetModel;
+export default SnippetModel;

@@ -1,11 +1,16 @@
-const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
+import HtmlWebpackPlugin from 'html-webpack-plugin';
+import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+// recriando __dirname e __filename no ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const commonConfig = {
   mode: 'development',
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: resolve(__dirname, 'dist'),
     filename: '[name].bundle.js',
     globalObject: 'this',
   },
@@ -43,17 +48,17 @@ const mainAppConfig = {
 };
 
 const welcomeConfig = {
-    ...commonConfig,
-    entry: {
-        welcome: './src/renderer/welcome.js'
-    },
-    plugins: [
-        new HtmlWebpackPlugin({
-            template: './src/renderer/welcome.html',
-            filename: 'welcome.html',
-            chunks: ['welcome']
-        })
-    ]
+  ...commonConfig,
+  entry: {
+    welcome: './src/renderer/welcome.js'
+  },
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: './src/renderer/welcome.html',
+      filename: 'welcome.html',
+      chunks: ['welcome']
+    })
+  ]
 };
 
-module.exports = [mainAppConfig, welcomeConfig];
+export default [mainAppConfig, welcomeConfig];

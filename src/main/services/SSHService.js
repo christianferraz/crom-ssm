@@ -1,5 +1,4 @@
-const { Client } = require('ssh2');
-const fs = require('fs');
+import { Client } from 'ssh2';
 
 class SSHService {
   constructor(connectionConfig) {
@@ -43,4 +42,4 @@ class SSHService {
   }
 }
 
-module.exports = SSHService;
+export default SSHService;

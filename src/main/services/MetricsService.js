@@ -1,5 +1,5 @@
-const SSHService = require('./SSHService');
-const logger = require('../utils/logger');
+import logger from '../utils/logger.js';
+import SSHService from './SSHService.js';
 
 class MetricsService {
     constructor(connection, sshConfig, webContents) {
@@ -133,4 +133,4 @@ class MetricsService {
     }
 }
 
-module.exports = MetricsService;
+export default MetricsService;

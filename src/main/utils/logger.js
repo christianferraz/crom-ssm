@@ -1,41 +1,41 @@
-const { app } = require('electron');
-const path = require('path');
-const winston = require('winston');
-require('winston-daily-rotate-file');
-const fs = require('fs');
+import { app } from 'electron';
+import { existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { format as _format, transports as _transports, createLogger } from 'winston';
+import 'winston-daily-rotate-file';
 
-const logDir = path.join(app.getPath('userData'), 'logs');
+const logDir = join(app.getPath('userData'), 'logs');
 
 // Ensure log directory exists
-if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir);
+if (!existsSync(logDir)) {
+    mkdirSync(logDir);
 }
 
-const fileFormat = winston.format.combine(
-    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
+const fileFormat = _format.combine(
+    _format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    _format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
 );
 
-const consoleFormat = winston.format.combine(
-    winston.format.colorize(),
-    winston.format.timestamp({ format: 'HH:mm:ss' }),
-    winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
+const consoleFormat = _format.combine(
+    _format.colorize(),
+    _format.timestamp({ format: 'HH:mm:ss' }),
+    _format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
 );
 
-const logger = winston.createLogger({
+const logger = createLogger({
     level: 'info',
     format: fileFormat,
     transports: [
-        new winston.transports.DailyRotateFile({
-            filename: path.join(logDir, 'ssm-%DATE%-combined.log'),
+        new _transports.DailyRotateFile({
+            filename: join(logDir, 'ssm-%DATE%-combined.log'),
             datePattern: 'YYYY-MM-DD',
             zippedArchive: true,
             maxSize: '20m',
             maxFiles: '14d',
         }),
-        new winston.transports.DailyRotateFile({
+        new _transports.DailyRotateFile({
             level: 'error',
-            filename: path.join(logDir, 'ssm-%DATE%-error.log'),
+            filename: join(logDir, 'ssm-%DATE%-error.log'),
             datePattern: 'YYYY-MM-DD',
             zippedArchive: true,
             maxSize: '20m',
@@ -47,10 +47,10 @@ const logger = winston.createLogger({
 // If we're not in production then log to the `console` with the format:
 // `${info.level}: ${info.message} JSON.stringify({ ...rest }) `
 if (process.env.NODE_ENV !== 'production') {
-    logger.add(new winston.transports.Console({
+    logger.add(new _transports.Console({
         format: consoleFormat,
         level: 'debug'
     }));
 }
 
-module.exports = logger;
+export default logger;

@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const keyPathGroup = document.getElementById('key-path-group');
     const testBtn = document.getElementById('test-connection-btn');
     const saveBtn = document.getElementById('save-connection-btn');
-
+    
     let currentConnections = [];
     let activeConnectionId = null;
     let validatedConnectionData = null;
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.dataset.id = conn.id;
             if (conn.id === activeConnectionId) li.classList.add('active');
-            
+
             const nameSpan = document.createElement('span');
             nameSpan.textContent = conn.name;
             nameSpan.title = `${conn.user}@${conn.host}`;
@@ -56,21 +56,27 @@ document.addEventListener('DOMContentLoaded', () => {
             li.appendChild(deleteBtn);
 
             li.addEventListener('click', (e) => {
+                console.log("teste");
                 if (e.target === deleteBtn) return;
                 handleConnectionClick(conn);
             });
+
             deleteBtn.addEventListener('click', () => handleDeleteClick(conn));
 
             connectionsList.appendChild(li);
         });
     };
-    
+
     const handleConnectionClick = async (conn) => {
+        // Apenas muda a conexão ativa, sem fechar a anterior
         activeConnectionId = conn.id;
         renderConnections();
+
         commandOutput.classList.remove('error');
         commandOutput.textContent = `Executando 'uptime' em ${conn.name}...`;
+
         try {
+            // O main process irá gerenciar a criação ou reutilização da sessão.
             const result = await window.ssm.exec(conn.id, 'uptime');
             commandOutput.textContent = `Saída de 'uptime' em ${conn.name}:\n\n${result.stdout}`;
         } catch (error) {
@@ -78,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
             commandOutput.textContent = `Erro ao executar comando em ${conn.name}:\n\n${error.message}`;
         }
     };
+
 
     const handleDeleteClick = (conn) => {
         Swal.fire({
@@ -91,6 +98,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }).then(async (result) => {
             if (result.isConfirmed) {
                 await window.ssm.removeConnection(conn.id);
+                // Fecha a sessão apenas da conexão que está sendo excluída
+                await window.ssm.closeSession(conn.id);
                 if(activeConnectionId === conn.id) {
                     activeConnectionId = null;
                     commandOutput.textContent = 'Selecione uma conexão para executar um comando de teste.';
@@ -109,8 +118,11 @@ document.addEventListener('DOMContentLoaded', () => {
     testBtn.addEventListener('click', async () => {
         const formData = new FormData(connectionForm);
         const connectionData = {
-            name: formData.get('name'), host: formData.get('host'), user: formData.get('user'),
-            authMethod: formData.get('authMethod'), keyPath: formData.get('keyPath') || null,
+            name: formData.get('name'),
+            host: formData.get('host'),
+            user: formData.get('user'),
+            authMethod: formData.get('authMethod'),
+            keyPath: formData.get('keyPath') || null,
             password: formData.get('password')
         };
 

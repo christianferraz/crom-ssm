@@ -1,5 +1,4 @@
-const { Client } = require('ssh2');
-const fs = require('fs');
+import { Client } from 'ssh2';
 
 class SFTPService {
     constructor(sshConfig) {
@@ -106,4 +105,4 @@ class SFTPService {
     }
 }
 
-module.exports = SFTPService;
+export default SFTPService;

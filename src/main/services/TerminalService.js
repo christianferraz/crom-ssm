@@ -1,5 +1,5 @@
-const { Client } = require('ssh2');
-const logger = require('../utils/logger');
+import { Client } from 'ssh2';
+import logger from '../utils/logger.js';
 
 class TerminalService {
     constructor(sshConfig, webContents, terminalId) {
@@ -15,14 +15,14 @@ class TerminalService {
             logger.info(`[Terminal-${this.terminalId}] Conexão SSH pronta para ${this.sshConfig.host}.`);
             this.client.shell((err, stream) => {
                 if (err) {
-                    logger.error(`[Terminal-${this.terminalId}] Erro ao iniciar o shell: ${err.message}`);
+                    error(`[Terminal-${this.terminalId}] Erro ao iniciar o shell: ${err.message}`);
                     this.webContents.send('ssm:terminal:data', { id: this.terminalId, data: `\r\n\x1b[31mErro ao iniciar o shell: ${err.message}\x1b[0m\r\n` });
                     return;
                 }
                 this.stream = stream;
 
                 stream.on('close', () => {
-                    logger.info(`[Terminal-${this.terminalId}] Stream do shell fechado para ${this.sshConfig.host}.`);
+                    info(`[Terminal-${this.terminalId}] Stream do shell fechado para ${this.sshConfig.host}.`);
                     this.client.end();
                 }).on('data', (data) => {
                     this.webContents.send('ssm:terminal:data', { id: this.terminalId, data });
@@ -30,10 +30,10 @@ class TerminalService {
                     this.webContents.send('ssm:terminal:data', { id: this.terminalId, data });
                 });
 
-                logger.info(`[Terminal-${this.terminalId}] Shell iniciado com sucesso para ${this.sshConfig.host}.`);
+                info(`[Terminal-${this.terminalId}] Shell iniciado com sucesso para ${this.sshConfig.host}.`);
             });
         }).on('error', (err) => {
-            logger.error(`[Terminal-${this.terminalId}] Erro de conexão SSH: ${err.message}`);
+            error(`[Terminal-${this.terminalId}] Erro de conexão SSH: ${err.message}`);
             this.webContents.send('ssm:terminal:data', { id: this.terminalId, data: `\r\n\x1b[31mErro de conexão SSH: ${err.message}\x1b[0m\r\n` });
         }).connect(this.sshConfig);
     }
@@ -42,7 +42,7 @@ class TerminalService {
         if (this.stream) {
             this.stream.write(data);
         } else {
-            logger.warn(`[Terminal-${this.terminalId}] Tentativa de escrita em um stream nulo.`);
+            warn(`[Terminal-${this.terminalId}] Tentativa de escrita em um stream nulo.`);
         }
     }
 
@@ -55,11 +55,11 @@ class TerminalService {
     stop() {
         if (this.stream) {
             this.stream.end();
-            logger.info(`[Terminal-${this.terminalId}] Enviado comando de finalização para o stream.`);
+            info(`[Terminal-${this.terminalId}] Enviado comando de finalização para o stream.`);
         }
         this.client.end();
-        logger.info(`[Terminal-${this.terminalId}] Cliente SSH para ${this.sshConfig.host} finalizado.`);
+        info(`[Terminal-${this.terminalId}] Cliente SSH para ${this.sshConfig.host} finalizado.`);
     }
 }
 
-module.exports = TerminalService;
+export default TerminalService;

@@ -1,11 +1,14 @@
-const { app } = require('electron');
-const path = require('path');
-const fs = require('fs/promises');
-const keytar = require('keytar');
-const ConnectionModel = require('../models/ConnectionModel');
+import { app } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
+import keytar from 'keytar';
 
+
+import { join } from 'path';
+import ConnectionModel from '../models/ConnectionModel.js';
+
+const { getPassword: _getPassword, setPassword: _setPassword, deletePassword } = keytar;
 const APP_NAME = 'ssm';
-const STORAGE_FILE = path.join(app.getPath('userData'), 'connections.json');
+const STORAGE_FILE = join(app.getPath('userData'), 'connections.json');
 
 class ConnectionService {
   constructor() {
@@ -14,7 +17,7 @@ class ConnectionService {
 
   async _loadConnectionsFromFile() {
     try {
-      const data = await fs.readFile(STORAGE_FILE, 'utf-8');
+      const data = await readFile(STORAGE_FILE, 'utf-8');
       const rawConnections = JSON.parse(data);
       this.connections = rawConnections.map(c => new ConnectionModel(c));
     } catch (error) {
@@ -30,7 +33,7 @@ class ConnectionService {
 
   async _saveConnectionsToFile() {
     try {
-      await fs.writeFile(STORAGE_FILE, JSON.stringify(this.connections, null, 2));
+      await writeFile(STORAGE_FILE, JSON.stringify(this.connections, null, 2));
     } catch (error) {
       console.error('Failed to save connections:', error);
     }
@@ -68,17 +71,17 @@ class ConnectionService {
     await this._loadConnectionsFromFile();
     this.connections = this.connections.filter(c => c.id !== id);
     await this._saveConnectionsToFile();
-    await keytar.deletePassword(APP_NAME, id);
+    await deletePassword(APP_NAME, id);
     return true;
   }
 
   async setPassword(connectionId, password) {
-    return keytar.setPassword(APP_NAME, connectionId, password);
+    return _setPassword(APP_NAME, connectionId, password);
   }
 
   async getPassword(connectionId) {
-    return keytar.getPassword(APP_NAME, connectionId);
+    return _getPassword(APP_NAME, connectionId);
   }
 }
 
-module.exports = new ConnectionService();
+export default new ConnectionService();

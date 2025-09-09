@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('ssm', {
   // Navigation
@@ -13,6 +13,18 @@ contextBridge.exposeInMainWorld('ssm', {
 
   // SSHService methods
   testConnection: (connectionData) => ipcRenderer.invoke('ssm:ssh:test', connectionData),
+
+  // Sessão persistente por conexão
+  // A lógica de sessão persistente é agora completamente delegada ao main process.
+  exec: (connectionId, command) => {
+    // O main process irá gerenciar a criação ou reutilização da sessão.
+    return ipcRenderer.invoke('ssm:exec', connectionId, command);
+  },
+
+  closeSession: (connectionId) => {
+    // O main process irá gerenciar o fechamento da sessão.
+    return ipcRenderer.invoke('ssm:session:close', connectionId);
+  },
 
   // SFTPService methods
   sftpList: (connectionId, remotePath) => ipcRenderer.invoke('ssm:sftp:list', connectionId, remotePath),

@@ -1,16 +1,21 @@
-const { ipcMain, dialog } = require('electron');
-const fs = require('fs/promises');
-const path = require('path');
-const connectionService = require('../services/ConnectionService');
-const SFTPService = require('../services/SFTPService');
-const MetricsService = require('../services/MetricsService');
-const TerminalService = require('../services/TerminalService');
-const SSHService = require('../services/SSHService');
-const snippetService = require('../services/SnippetService');
-const logger = require('../utils/logger');
+import { dialog, ipcMain } from 'electron';
+import { readFile } from 'fs/promises';
+import { basename, join } from 'path';
+import connectionService from '../services/ConnectionService.js';
+import MetricsService from '../services/MetricsService.js';
+import SFTPService from '../services/SFTPService.js';
+import SSHService from '../services/SSHService.js';
+import snippetService from '../services/SnippetService.js';
+import TerminalService from '../services/TerminalService.js';
+import logger from '../utils/logger.js';
 
 let activeMetricsService = null;
 const activeTerminals = new Map();
+
+// Adiciona um mapa para armazenar sessões SSH ativas
+const activeSSHSessions = new Map();
+// Adiciona um mapa para armazenar sessões SFTP ativas
+const activeSFTPSessions = new Map();
 
 async function getAuthConfig(connData, useRawPassword = false) {
     let authConfig = {
@@ -22,7 +27,7 @@ async function getAuthConfig(connData, useRawPassword = false) {
             authConfig.password = password;
         }
     } else if (connData.authMethod === 'key' && connData.keyPath) {
-        try { authConfig.privateKey = await fs.readFile(connData.keyPath); } 
+        try { authConfig.privateKey = await readFile(connData.keyPath); } 
         catch (error) { throw new Error(`Falha ao ler a chave privada em ${connData.keyPath}`); }
     } else if (connData.authMethod !== 'key' && connData.authMethod !== 'password') {
       throw new Error('Método de autenticação inválido ou credenciais ausentes.');
@@ -50,12 +55,16 @@ function registerIpcHandlers() {
   handle('ssm:connections:list', () => connectionService.list());
   handle('ssm:connections:add', (evt, d) => connectionService.add(d));
   handle('ssm:connections:update', (evt, id, d) => connectionService.update(id, d));
-  handle('ssm:connections:remove', (evt, id) => connectionService.remove(id));
+  handle('ssm:connections:remove', async (evt, id) => {
+    // Garante que a sessão relacionada seja encerrada
+    console.log('Removendo conexão e fechando sessões associadas:', id);
+    await closeSession(id);
+    return connectionService.remove(id);
+  });
   handle('ssm:connections:setPassword', (evt, id, p) => connectionService.setPassword(id, p));
   
   handle('ssm:ssh:test', async (event, connData) => {
     const authConfig = await getAuthConfig(connData, true);
-    // If password is not provided for password auth, and it's an existing connection, try fetching it.
     if(connData.id && connData.authMethod === 'password' && !connData.password) {
         authConfig.password = await connectionService.getPassword(connData.id);
     }
@@ -68,20 +77,64 @@ function registerIpcHandlers() {
     }
   });
 
-  // SFTP Handlers
-  const sftpAction = async (connectionId, action) => {
+  // Funções para gerenciar o ciclo de vida das sessões
+  async function getOrStartSession(connectionId, serviceType) {
     const conn = await connectionService.get(connectionId);
     if (!conn) throw new Error('Conexão não encontrada');
     const authConfig = await getAuthConfig(conn);
-    const sftp = new SFTPService(authConfig);
-    try { 
-        await sftp.connect(); 
-        return await action(sftp);
-    } finally { 
-        sftp.disconnect(); 
+    let sessionMap, ServiceClass;
+
+    if (serviceType === 'ssh') {
+      sessionMap = activeSSHSessions;
+      ServiceClass = SSHService;
+    } else if (serviceType === 'sftp') {
+      sessionMap = activeSFTPSessions;
+      ServiceClass = SFTPService;
+    } else {
+      throw new Error('Tipo de serviço inválido.');
     }
+
+    if (!sessionMap.has(connectionId)) {
+      const service = new ServiceClass(authConfig);
+      await service.connect();
+      sessionMap.set(connectionId, service);
+      logger.info(`Sessão ${serviceType} para ID ${connectionId} criada e armazenada.`);
+    }
+    return sessionMap.get(connectionId);
+  }
+
+  async function closeSession(connectionId, serviceType = 'all') {
+    if (serviceType === 'all' || serviceType === 'ssh') {
+      const sshService = activeSSHSessions.get(connectionId);
+      if (sshService) {
+        sshService.end();
+        activeSSHSessions.delete(connectionId);
+        logger.info(`Sessão SSH para ID ${connectionId} encerrada.`);
+      }
+    }
+    if (serviceType === 'all' || serviceType === 'sftp') {
+      const sftpService = activeSFTPSessions.get(connectionId);
+      if (sftpService) {
+        sftpService.disconnect();
+        activeSFTPSessions.delete(connectionId);
+        logger.info(`Sessão SFTP para ID ${connectionId} encerrada.`);
+      }
+    }
+  }
+
+  // Agora, reescrevemos as funções sftpAction e sshAction para usar o gerenciamento de sessões
+  const sftpAction = async (connectionId, action) => {
+    const sftp = await getOrStartSession(connectionId, 'sftp');
+    return action(sftp);
   };
   
+  const sshAction = async (connectionId, command) => {
+    const ssh = await getOrStartSession(connectionId, 'ssh');
+    const result = await ssh.exec(command);
+    return result.stdout;
+  };
+
+  // SFTP Handlers
   handle('ssm:sftp:list', (evt, id, p) => sftpAction(id, sftp => sftp.list(p)));
   handle('ssm:sftp:readFile', (evt, id, p) => sftpAction(id, sftp => sftp.readFile(p)));
   handle('ssm:sftp:readFileAsBase64', (evt, id, p) => sftpAction(id, sftp => sftp.readFile(p, 'base64')));
@@ -92,7 +145,7 @@ function registerIpcHandlers() {
   handle('ssm:sftp:rename', (evt, id, op, np) => sftpAction(id, sftp => sftp.rename(op, np)));
   
   handle('ssm:sftp:downloadFile', async (evt, connId, remotePath) => {
-      const defaultFileName = path.basename(remotePath);
+      const defaultFileName = basename(remotePath);
       const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: defaultFileName });
       if (canceled || !filePath) {
         logger.warn(`Download do arquivo '${remotePath}' cancelado pelo usuário.`);
@@ -109,8 +162,8 @@ function registerIpcHandlers() {
         return { success: false, reason: 'canceled' };
     }
     const localPath = filePaths[0];
-    const fileName = path.basename(localPath);
-    const remotePath = path.join(remoteDir, fileName).replace(/\\/g, '/');
+    const fileName = basename(localPath);
+    const remotePath = join(remoteDir, fileName).replace(/\\/g, '/');
     try {
         await sftpAction(connId, sftp => sftp.uploadFile(localPath, remotePath));
         return { success: true, fileName };
@@ -119,21 +172,6 @@ function registerIpcHandlers() {
         return { success: false, error: error.message };
     }
   });
-
-  // SSH Exec Action for one-off commands
-  const sshAction = async (connectionId, command) => {
-    const conn = await connectionService.get(connectionId);
-    if (!conn) throw new Error('Conexão não encontrada');
-    const authConfig = await getAuthConfig(conn);
-    const ssh = new SSHService(authConfig);
-    try {
-        await ssh.connect();
-        const result = await ssh.exec(command);
-        return result.stdout;
-    } finally {
-        ssh.end();
-    }
-  };
 
   // Process Handlers
   handle('ssm:process:list', (evt, connId) => sshAction(connId, "ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu"));
@@ -185,6 +223,10 @@ function registerIpcHandlers() {
     const service = activeTerminals.get(terminalId);
     if (service) service.resize(cols, rows);
   });
+  
+  // Handlers para o front-end
+  handle('ssm:session:close', (evt, id) => closeSession(id));
+  handle('ssm:exec', (evt, id, cmd) => sshAction(id, cmd));
 
   // Snippets Handlers
   handle('ssm:snippets:list', () => snippetService.list());
@@ -193,4 +235,4 @@ function registerIpcHandlers() {
   handle('ssm:snippets:remove', (evt, id) => snippetService.remove(id));
 }
 
-module.exports = { registerIpcHandlers };
+export { registerIpcHandlers };

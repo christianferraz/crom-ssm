@@ -1,9 +1,9 @@
-const { app } = require('electron');
-const path = require('path');
-const fs = require('fs/promises');
-const SnippetModel = require('../models/SnippetModel');
+import { app } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
+import { join } from 'path';
+import SnippetModel from '../models/SnippetModel.js';
 
-const STORAGE_FILE = path.join(app.getPath('userData'), 'snippets.json');
+const STORAGE_FILE = join(app.getPath('userData'), 'snippets.json');
 
 class SnippetService {
   constructor() {
@@ -12,7 +12,7 @@ class SnippetService {
 
   async _loadSnippetsFromFile() {
     try {
-      const data = await fs.readFile(STORAGE_FILE, 'utf-8');
+      const data = await readFile(STORAGE_FILE, 'utf-8');
       const rawSnippets = JSON.parse(data);
       this.snippets = rawSnippets.map(s => new SnippetModel(s));
     } catch (error) {
@@ -28,7 +28,7 @@ class SnippetService {
 
   async _saveSnippetsToFile() {
     try {
-      await fs.writeFile(STORAGE_FILE, JSON.stringify(this.snippets, null, 2));
+      await writeFile(STORAGE_FILE, JSON.stringify(this.snippets, null, 2));
     } catch (error) {
       console.error('Failed to save snippets:', error);
     }
@@ -65,4 +65,4 @@ class SnippetService {
   }
 }
 
-module.exports = new SnippetService();
+export default new SnippetService();
