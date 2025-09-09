@@ -200,7 +200,9 @@ function registerIpcHandlers() {
 
   // Terminal Handlers
   ipcMain.on('ssm:terminal:create', async (event, connectionId, terminalId) => {
-      const conn = await connectionService.get(connectionId);
+    //alterar aqui - christian  
+    
+    const conn = await connectionService.get(connectionId);
       if (conn) {
           const authConfig = await getAuthConfig(conn);
           const terminalService = new TerminalService(authConfig, event.sender, terminalId);
